@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="CLAUDE.md" />
+    <File Path="N8nMcpHttp.postman_collection.json" />
+    <File Path="N8nMcpHttp.postman_environment.json" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="McpToolkit/McpToolkit.csproj" />
+  <Project Path="N8nMcpHttp/N8nMcpHttp.csproj" />
+</Solution>

@@ -1,0 +1,1734 @@
+{
+  "info": {
+    "name": "N8nMcpHttp",
+    "description": "Collection para testar o servidor MCP do n8n via HTTP (JSON-RPC 2.0).\n\nFluxo recomendado:\n1. Configure as variáveis `n8n_url` e `n8n_api_key` no environment (ou deixe em branco para usar a config padrão do servidor).\n2. Execute **Initialize** — o `mcp-session-id` é salvo automaticamente.\n3. Execute qualquer tool na ordem desejada.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5462",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Initialize",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "function parseMcpResponse() {",
+              "    var body = pm.response.text();",
+              "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+              "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+              "}",
+              "",
+              "// Salva o session id retornado no header",
+              "var sessionId = pm.response.headers.get('mcp-session-id');",
+              "if (sessionId) {",
+              "    pm.environment.set('mcp_session_id', sessionId);",
+              "    console.log('mcp-session-id salvo:', sessionId);",
+              "} else {",
+              "    console.warn('Header mcp-session-id não encontrado na resposta.');",
+              "}",
+              "",
+              "// Valida que a resposta é 200 e tem result",
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Resposta contém result', function () {",
+              "    var json = parseMcpResponse();",
+              "    pm.expect(json).to.have.property('result');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+          { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"initialize\",\n  \"params\": {\n    \"protocolVersion\": \"2024-11-05\",\n    \"capabilities\": {},\n    \"clientInfo\": {\n      \"name\": \"postman\",\n      \"version\": \"1.0\"\n    }\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/mcp",
+          "host": ["{{base_url}}"],
+          "path": ["mcp"]
+        },
+        "description": "Inicia a sessão MCP. O `mcp-session-id` retornado no header é salvo automaticamente na variável de environment `mcp_session_id`."
+      }
+    },
+    {
+      "name": "2. List Tools",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "function parseMcpResponse() {",
+              "    var body = pm.response.text();",
+              "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+              "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+              "}",
+              "",
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Resposta contém lista de tools', function () {",
+              "    var json = parseMcpResponse();",
+              "    pm.expect(json.result).to.have.property('tools');",
+              "    pm.expect(json.result.tools).to.be.an('array');",
+              "    console.log('Tools disponíveis:', json.result.tools.map(t => t.name));",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+          { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+          { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/mcp",
+          "host": ["{{base_url}}"],
+          "path": ["mcp"]
+        },
+        "description": "Lista todas as tools disponíveis no servidor MCP."
+      }
+    },
+    {
+      "name": "Workflows",
+      "item": [
+        {
+          "name": "list_workflows",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o ID do primeiro workflow encontrado",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    var items = parsed.data || parsed;",
+                  "    if (items.length > 0) {",
+                  "        pm.environment.set('workflow_id', items[0].id);",
+                  "        pm.environment.set('workflow_name', items[0].name);",
+                  "        console.log('workflow_id salvo:', items[0].id, '| Nome:', items[0].name);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair workflow_id:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 10,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_workflows\",\n    \"arguments\": {\n      \"limit\": 100\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista os workflows do n8n. Resposta resumida por item (id, name, active, createdAt, updatedAt, tags, nodeCount). Salva automaticamente o `workflow_id` e `workflow_name` do primeiro item retornado."
+          }
+        },
+        {
+          "name": "find_in_workflows",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 19,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"find_in_workflows\",\n    \"arguments\": {\n      \"search\": \"webhook\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Procura um texto em todos os workflows (nome, nodes, parâmetros), paginando automaticamente no servidor. Retorna apenas os workflows/nodes que casaram."
+          }
+        },
+        {
+          "name": "get_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 11,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_workflow\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Obtém o JSON de um workflow. Por padrão omite pinData/staticData/meta/shared; adicione \"full\": true nos arguments para o workflow completo. Usa a variável `workflow_id`."
+          }
+        },
+        {
+          "name": "get_workflow_nodes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 12,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_workflow_nodes\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista os nodes de um workflow (nome, tipo e se está desabilitado). Usa a variável `workflow_id`."
+          }
+        },
+        {
+          "name": "get_workflow_node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 50,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_workflow_node\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"node_name\": \"AJUSTE_O_NOME_DO_NODE\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Obtém o JSON completo de um único node de um workflow, pelo nome. Ajuste `node_name` para um node existente no workflow de `workflow_id`."
+          }
+        },
+        {
+          "name": "update_workflow_node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup automático gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 51,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_workflow_node\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"node_name\": \"AJUSTE_O_NOME_DO_NODE\",\n      \"node_patch_json\": \"{\\\"disabled\\\":true}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Aplica um merge profundo de `node_patch_json` sobre um node existente, sem reenviar o workflow inteiro. Faz backup automático antes (caminho em `backupFile` na resposta)."
+          }
+        },
+        {
+          "name": "add_workflow_node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup automático gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 52,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"add_workflow_node\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"node_json\": \"{\\\"name\\\":\\\"Node via Postman\\\",\\\"type\\\":\\\"n8n-nodes-base.noOp\\\",\\\"typeVersion\\\":1,\\\"parameters\\\":{}}\",\n      \"connect_from\": \"AJUSTE_NODE_ORIGEM\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Adiciona um node a um workflow, opcionalmente conectando-o via `connect_from`/`connect_to`. Faz backup automático antes (caminho em `backupFile` na resposta)."
+          }
+        },
+        {
+          "name": "delete_workflow_node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup automático gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 53,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_workflow_node\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"node_name\": \"Node via Postman\",\n      \"reconnect\": true\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Remove um node e suas referências em connections (religando upstream→downstream se reconnect=true). Ação irreversível — faz backup automático antes (caminho em `backupFile` na resposta)."
+          }
+        },
+        {
+          "name": "rename_workflow_node",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup automático gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 54,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"rename_workflow_node\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"old_name\": \"AJUSTE_O_NOME_ATUAL\",\n      \"new_name\": \"Novo nome via Postman\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Renomeia um node, atualizando connections e expressões $('Nome antigo') nos demais nodes. Faz backup automático antes (caminho em `backupFile` na resposta)."
+          }
+        },
+        {
+          "name": "create_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o ID do workflow criado",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var workflow = JSON.parse(content);",
+                  "    if (workflow.id) {",
+                  "        pm.environment.set('workflow_id', workflow.id);",
+                  "        pm.environment.set('workflow_name', workflow.name);",
+                  "        console.log('workflow_id salvo:', workflow.id, '| Nome:', workflow.name);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair workflow_id:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 13,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"create_workflow\",\n    \"arguments\": {\n      \"name\": \"Workflow criado via Postman\",\n      \"nodes_json\": \"[]\",\n      \"connections_json\": \"{}\",\n      \"settings_json\": \"{\\\"executionOrder\\\":\\\"v1\\\"}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Cria um novo workflow (sempre inativo). Salva automaticamente o `workflow_id` criado."
+          }
+        },
+        {
+          "name": "update_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup automático gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 14,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_workflow\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"new_name\": \"Workflow atualizado via Postman\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Atualiza um workflow existente. Apenas os parâmetros informados são alterados. Não altera o estado ativo. Faz backup automático antes (caminho em `backupFile`) e retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo."
+          }
+        },
+        {
+          "name": "duplicate_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 15,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"duplicate_workflow\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"new_name\": \"Cópia via Postman\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Duplica um workflow existente (a cópia é criada inativa). Retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo."
+          }
+        },
+        {
+          "name": "activate_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 16,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"activate_workflow\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Ativa um workflow do n8n. Usa a variável `workflow_id`. Retorna um resumo compacto (id, name, active, nodeCount, nodes)."
+          }
+        },
+        {
+          "name": "deactivate_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 17,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"deactivate_workflow\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Desativa um workflow do n8n. Usa a variável `workflow_id`. Retorna um resumo compacto (id, name, active, nodeCount, nodes)."
+          }
+        },
+        {
+          "name": "delete_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup automático gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 18,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_workflow\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Exclui permanentemente um workflow do n8n. Ação irreversível — faz backup automático antes (caminho em `backupFile` na resposta; use restore_workflow_backup para reverter)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Tables",
+      "item": [
+        {
+          "name": "list_data_tables",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o ID da primeira data table encontrada",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    var items = parsed.data || parsed;",
+                  "    if (items.length > 0) {",
+                  "        pm.environment.set('table_id', items[0].id);",
+                  "        pm.environment.set('table_name', items[0].name);",
+                  "        console.log('table_id salvo:', items[0].id, '| Nome:', items[0].name);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair table_id:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 20,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_data_tables\",\n    \"arguments\": {}\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista as data tables do n8n. Salva automaticamente o `table_id` e `table_name` da primeira tabela retornada."
+          }
+        },
+        {
+          "name": "get_data_table",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 21,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_data_table\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Obtém uma data table, incluindo suas colunas (nome, tipo, índice)."
+          }
+        },
+        {
+          "name": "get_data_table_rows",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 22,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_data_table_rows\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\",\n      \"limit\": 100\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista as linhas de uma data table. Resposta paginada (verifique nextCursor)."
+          }
+        },
+        {
+          "name": "create_data_table_column",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o ID da coluna criada",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var column = JSON.parse(content);",
+                  "    if (column.id) {",
+                  "        pm.environment.set('column_id', column.id);",
+                  "        console.log('column_id salvo:', column.id);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair column_id:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 23,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"create_data_table_column\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\",\n      \"name\": \"coluna_teste\",\n      \"type\": \"string\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Cria uma coluna em uma data table. Tipos válidos: string, number, boolean, date. Salva automaticamente o `column_id` criado."
+          }
+        },
+        {
+          "name": "insert_data_table_rows",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 24,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"insert_data_table_rows\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\",\n      \"rows_json\": \"[{\\\"coluna_teste\\\":\\\"valor via Postman\\\"}]\",\n      \"return_type\": \"all\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Insere uma ou mais linhas em uma data table. Ajuste `rows_json` conforme as colunas da tabela."
+          }
+        },
+        {
+          "name": "update_data_table_rows",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 25,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_data_table_rows\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\",\n      \"filter_json\": \"{\\\"type\\\":\\\"and\\\",\\\"filters\\\":[{\\\"columnName\\\":\\\"coluna_teste\\\",\\\"condition\\\":\\\"eq\\\",\\\"value\\\":\\\"valor via Postman\\\"}]}\",\n      \"data_json\": \"{\\\"coluna_teste\\\":\\\"valor atualizado via Postman\\\"}\",\n      \"return_data\": true\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Atualiza as linhas que casarem com o filtro informado. Ajuste `filter_json` e `data_json` conforme as colunas da tabela. Faz backup automático da tabela antes (colunas + todas as linhas); a resposta vem envolvida em { result, backupFile }."
+          }
+        },
+        {
+          "name": "delete_data_table_rows",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 26,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_data_table_rows\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\",\n      \"filter_json\": \"{\\\"type\\\":\\\"and\\\",\\\"filters\\\":[{\\\"columnName\\\":\\\"coluna_teste\\\",\\\"condition\\\":\\\"eq\\\",\\\"value\\\":\\\"valor atualizado via Postman\\\"}]}\",\n      \"return_data\": true\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Exclui as linhas que casarem com o filtro informado. O filtro é obrigatório para evitar exclusão acidental de todos os dados. Faz backup automático da tabela antes (colunas + todas as linhas); a resposta vem envolvida em { result, backupFile }."
+          }
+        },
+        {
+          "name": "delete_data_table_column",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 27,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_data_table_column\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\",\n      \"column_id\": \"{{column_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Exclui uma coluna de uma data table. Ação irreversível — faz backup automático da tabela antes (colunas + todas as linhas); a resposta vem envolvida em { result, backupFile }."
+          }
+        },
+        {
+          "name": "delete_data_table",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 28,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_data_table\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Exclui permanentemente uma data table, incluindo todas as suas colunas e linhas. Ação irreversível — faz backup automático (colunas + todas as linhas) antes; retorna { deleted, id, backupFile }."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Executions",
+      "item": [
+        {
+          "name": "list_executions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o ID da primeira execução encontrada",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    var items = parsed.data || parsed;",
+                  "    if (items.length > 0) {",
+                  "        pm.environment.set('execution_id', items[0].id);",
+                  "        console.log('execution_id salvo:', items[0].id);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair execution_id:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 30,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_executions\",\n    \"arguments\": {\n      \"limit\": 100\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista as execuções de workflows. Resposta resumida por item (id, status, workflowId, mode, startedAt, stoppedAt e, se houver erro, errorNode/errorMessage); use include_data=true para o payload completo. Salva automaticamente o `execution_id` da primeira execução retornada. Opcionalmente filtre por `workflow_id` e `status`."
+          }
+        },
+        {
+          "name": "get_execution",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 31,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_execution\",\n    \"arguments\": {\n      \"execution_id\": \"{{execution_id}}\",\n      \"include_data\": false\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Obtém os detalhes de uma execução. Resposta resumida por padrão (id, status, workflowId, mode, startedAt, stoppedAt e, se houver erro, errorNode/errorMessage). Use `include_data: true` para trazer o payload completo (pode ser grande)."
+          }
+        },
+        {
+          "name": "delete_execution",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 32,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_execution\",\n    \"arguments\": {\n      \"execution_id\": \"{{execution_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Exclui uma execução do histórico do n8n. Ação irreversível."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "list_tags",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o ID da primeira tag encontrada",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    var items = parsed.data || parsed;",
+                  "    if (items.length > 0) {",
+                  "        pm.environment.set('tag_id', items[0].id);",
+                  "        pm.environment.set('tag_name', items[0].name);",
+                  "        console.log('tag_id salvo:', items[0].id, '| Nome:', items[0].name);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair tag_id:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 40,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_tags\",\n    \"arguments\": {\n      \"limit\": 100\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista as tags de workflow da instância n8n. Salva automaticamente o `tag_id` e `tag_name` da primeira tag retornada."
+          }
+        },
+        {
+          "name": "get_tag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 41,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_tag\",\n    \"arguments\": {\n      \"tag_id\": \"{{tag_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Obtém uma tag do n8n pelo ID."
+          }
+        },
+        {
+          "name": "create_tag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o ID da tag criada",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var tag = JSON.parse(content);",
+                  "    if (tag.id) {",
+                  "        pm.environment.set('tag_id', tag.id);",
+                  "        pm.environment.set('tag_name', tag.name);",
+                  "        console.log('tag_id salvo:', tag.id, '| Nome:', tag.name);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair tag_id:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 42,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"create_tag\",\n    \"arguments\": {\n      \"name\": \"Tag criada via Postman\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Cria uma nova tag no n8n. Salva automaticamente o `tag_id` criado."
+          }
+        },
+        {
+          "name": "update_tag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 43,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_tag\",\n    \"arguments\": {\n      \"tag_id\": \"{{tag_id}}\",\n      \"name\": \"Tag renomeada via Postman\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Renomeia uma tag existente."
+          }
+        },
+        {
+          "name": "delete_tag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 44,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_tag\",\n    \"arguments\": {\n      \"tag_id\": \"{{tag_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Exclui uma tag do n8n. Ação irreversível."
+          }
+        },
+        {
+          "name": "get_workflow_tags",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 45,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_workflow_tags\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista as tags atribuídas a um workflow."
+          }
+        },
+        {
+          "name": "set_workflow_tags",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 46,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"set_workflow_tags\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"tag_ids\": \"{{tag_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Define o conjunto de tags de um workflow, substituindo as tags atuais. Informe múltiplos IDs separados por vírgula em `tag_ids`."
+          }
+        },
+        {
+          "name": "set_workflow_tags_by_name",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 47,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"set_workflow_tags_by_name\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\",\n      \"tag_names\": \"produção, financeiro\",\n      \"create_missing\": true\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Define as tags de um workflow a partir dos nomes informados, resolvendo (ou criando, se create_missing=true) os IDs automaticamente antes de chamar set_workflow_tags."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backups",
+      "item": [
+        {
+          "name": "list_backups",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 60,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_backups\",\n    \"arguments\": {}\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Lista os arquivos de backup automático (workflows e data tables) salvos pelo servidor antes de operações destrutivas, com nome, data e tamanho. Use o parâmetro opcional `filter` para buscar por substring do nome do arquivo."
+          }
+        },
+        {
+          "name": "restore_workflow_backup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 61,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"restore_workflow_backup\",\n    \"arguments\": {\n      \"backup_file\": \"{{backup_file}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Restaura um workflow a partir de um arquivo de backup. A variável `backup_file` é salva automaticamente por update_workflow/delete_workflow e pelas ferramentas de edição de node — ou obtenha o nome via list_backups. Sobrescreve se o workflow ainda existir; recria (novo ID) se foi excluído."
+          }
+        }
+      ]
+    }
+  ]
+}
