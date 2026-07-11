@@ -146,14 +146,7 @@ Antes de qualquer operação destrutiva (`update_workflow`, `delete_workflow`, a
 
 #### Baixando um backup
 
-`backupUrl`/`downloadUrl` apontam para `GET /backups/{fileName}` no próprio servidor MCP. Antes de servir o arquivo, o endpoint valida a API key fazendo uma leitura mínima na instância n8n de destino, então a requisição de download precisa enviar os mesmos headers usados para autenticar no MCP:
-
-```
-X-N8N-URL: <url-da-sua-instancia-n8n>
-X-N8N-API-KEY: <sua-api-key>
-```
-
-Um navegador comum (sem headers customizados) não funciona — use `curl`, `Invoke-WebRequest` ou um cliente que permita definir headers. Retorna `401` se a API key for inválida e `404` se o arquivo não existir.
+`backupUrl`/`downloadUrl` apontam para `GET /backups/{fileName}` no próprio servidor MCP. O endpoint é aberto (sem autenticação) — basta acessar a URL em qualquer navegador ou cliente HTTP. Retorna `404` se o arquivo não existir.
 
 ## Testando via Postman
 
@@ -268,7 +261,7 @@ O `McpClient` resolve o destino priorizando os headers `X-N8N-URL` / `X-N8N-API-
 
 A API de criação/atualização de workflow do n8n só aceita os campos `name`, `nodes`, `connections` e `settings` — o `McpClient` filtra o payload para conter apenas esses campos antes de cada chamada, e implementa atualizações parciais no lado do cliente (faz `GET` do workflow atual, mescla os campos alterados e envia o resultado filtrado). As ferramentas de edição granular de node (`update_workflow_node`, `add_workflow_node`, `delete_workflow_node`, `rename_workflow_node`) seguem o mesmo padrão, mas mesclando apenas o node/conexão alterado antes do `PUT`.
 
-O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções, aceita URL do editor n8n como `workflow_id`, e delega ao `BackupService` o snapshot automático antes de operações destrutivas. O nome do arquivo de backup inclui o nome sanitizado do workflow/tabela além do ID (ex: `20260711-153000-workflow-MeuFluxo-abc123.json`). O conteúdo do backup fica em disco (pasta `backups/` por padrão) e nunca passa pela IA — a ferramenta retorna apenas o nome do arquivo (`backupFile`) e um link de download (`backupUrl`), montado por `McpTools.BuildBackupUrl` a partir de `N8n:PublicBaseUrl` ou, na ausência dele, do host da própria requisição MCP. O endpoint `GET /backups/{fileName}` (`Program.cs`) valida a API key do n8n informada nos headers antes de servir o arquivo.
+O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções, aceita URL do editor n8n como `workflow_id`, e delega ao `BackupService` o snapshot automático antes de operações destrutivas. O nome do arquivo de backup inclui o nome sanitizado do workflow/tabela além do ID (ex: `20260711-153000-workflow-MeuFluxo-abc123.json`). O conteúdo do backup fica em disco (pasta `backups/` por padrão) e nunca passa pela IA — a ferramenta retorna apenas o nome do arquivo (`backupFile`) e um link de download (`backupUrl`), montado por `McpTools.BuildBackupUrl` a partir de `N8n:PublicBaseUrl` ou, na ausência dele, do host da própria requisição MCP. O endpoint `GET /backups/{fileName}` (`Program.cs`) é aberto, sem autenticação — serve o arquivo direto se ele existir.
 
 ## Testes
 

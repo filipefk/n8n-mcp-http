@@ -63,9 +63,6 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         };
     }
 
-    public Task ValidateConnectionAsync(CancellationToken ct = default) =>
-        SendAsync(HttpMethod.Get, "workflows?limit=1", ct: ct);
-
     // ---------- Workflows ----------
 
     public Task<JsonNode?> ListWorkflowsAsync(string? name, bool? active, int limit, string? cursor, bool excludePinnedData = true, CancellationToken ct = default)

@@ -1693,6 +1693,116 @@
           }
         },
         {
+          "name": "backup_workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup manual gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 62,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"backup_workflow\",\n    \"arguments\": {\n      \"workflow_id\": \"{{workflow_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Faz um backup manual de um workflow, sem estar vinculado a uma operação de alteração. Salva no mesmo local dos backups automáticos e aparece em list_backups. Retorna backupFile e backupUrl."
+          }
+        },
+        {
+          "name": "backup_data_table",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "function parseMcpResponse() {",
+                  "    var body = pm.response.text();",
+                  "    var dataLine = body.split('\\n').find(l => l.startsWith('data:'));",
+                  "    return JSON.parse(dataLine.replace(/^data:\\s*/, ''));",
+                  "}",
+                  "",
+                  "// Salva o caminho do backup manual gerado pelo servidor",
+                  "try {",
+                  "    var json = parseMcpResponse();",
+                  "    var content = json.result.content[0].text;",
+                  "    var parsed = JSON.parse(content);",
+                  "    if (parsed.backupFile) {",
+                  "        pm.environment.set('backup_file', parsed.backupFile);",
+                  "        console.log('backup_file salvo:', parsed.backupFile);",
+                  "    }",
+                  "} catch (e) {",
+                  "    console.warn('Não foi possível extrair backupFile:', e.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 63,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"backup_data_table\",\n    \"arguments\": {\n      \"table_id\": \"{{table_id}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Faz um backup manual de uma data table (colunas + todas as linhas), sem estar vinculado a uma operação de alteração. Salva no mesmo local dos backups automáticos e aparece em list_backups. Retorna backupFile e backupUrl."
+          }
+        },
+        {
           "name": "restore_workflow_backup",
           "event": [
             {
@@ -1726,6 +1836,68 @@
               "path": ["mcp"]
             },
             "description": "Restaura um workflow a partir de um arquivo de backup. A variável `backup_file` é salva automaticamente por update_workflow/delete_workflow e pelas ferramentas de edição de node — ou obtenha o nome via list_backups. Sobrescreve se o workflow ainda existir; recria (novo ID) se foi excluído."
+          }
+        },
+        {
+          "name": "restore_data_table_backup",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
+              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 64,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"restore_data_table_backup\",\n    \"arguments\": {\n      \"backup_file\": \"{{backup_file}}\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/mcp",
+              "host": ["{{base_url}}"],
+              "path": ["mcp"]
+            },
+            "description": "Restaura uma data table a partir de um arquivo de backup (colunas + linhas) — substituição total: exclui a tabela atual (se existir) e recria do zero (o ID sempre muda). A variável `backup_file` é salva automaticamente por delete_data_table/delete_data_table_column/update_data_table_rows/delete_data_table_rows/backup_data_table — ou obtenha o nome via list_backups."
+          }
+        },
+        {
+          "name": "Download backup file",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/backups/{{backup_file}}",
+              "host": ["{{base_url}}"],
+              "path": ["backups", "{{backup_file}}"]
+            },
+            "description": "Baixa o conteúdo de um arquivo de backup (workflow ou data table). Endpoint aberto, sem autenticação — usa a variável `backup_file` salva automaticamente pelas outras chamadas de backup, ou obtida via list_backups. Retorna 404 se o arquivo não existir."
           }
         }
       ]

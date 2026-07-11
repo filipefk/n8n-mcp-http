@@ -729,7 +729,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
 
     // ---------- Backups ----------
 
-    [McpServerTool, Description("Faz um backup manual de um workflow do n8n, sem precisar estar vinculado a uma operação de alteração. Salva no servidor (mesmo local dos backups automáticos) e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo — exige os headers X-N8N-URL/X-N8N-API-KEY).")]
+    [McpServerTool, Description("Faz um backup manual de um workflow do n8n, sem precisar estar vinculado a uma operação de alteração. Salva no servidor (mesmo local dos backups automáticos) e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
     public async Task<string> backup_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -739,7 +739,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return new JsonObject { ["workflowId"] = id, ["backupFile"] = backupFile, ["backupUrl"] = BuildBackupUrl(backupFile) }.ToJsonString();
     }
 
-    [McpServerTool, Description("Faz um backup manual de uma data table do n8n (colunas + todas as linhas), sem precisar estar vinculado a uma operação de alteração. Salva no servidor (mesmo local dos backups automáticos) e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo — exige os headers X-N8N-URL/X-N8N-API-KEY).")]
+    [McpServerTool, Description("Faz um backup manual de uma data table do n8n (colunas + todas as linhas), sem precisar estar vinculado a uma operação de alteração. Salva no servidor (mesmo local dos backups automáticos) e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
     public async Task<string> backup_data_table(
         [Description("ID da data table")] string table_id,
         CancellationToken ct = default)

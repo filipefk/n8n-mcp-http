@@ -38,17 +38,8 @@ app.UseWhen(
 
 app.MapMcp("/mcp");
 
-app.MapGet("/backups/{fileName}", async Task<IResult> (string fileName, McpClient n8n, BackupService backups, CancellationToken ct) =>
+app.MapGet("/backups/{fileName}", (string fileName, BackupService backups) =>
 {
-    try
-    {
-        await n8n.ValidateConnectionAsync(ct);
-    }
-    catch (InvalidOperationException)
-    {
-        return Results.Unauthorized();
-    }
-
     var path = backups.ResolveBackupPath(fileName);
     return path is null
         ? Results.NotFound()
