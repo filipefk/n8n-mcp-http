@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace McpToolkit;
@@ -17,17 +18,17 @@ public sealed class BackupService
         Directory.CreateDirectory(_backupDir);
     }
 
-    public Task<string> SaveWorkflowBackupAsync(string workflowId, JsonNode? workflow, CancellationToken ct = default) =>
-        SaveAsync($"workflow-{SanitizeIdForFileName(workflowId)}", workflow, ct);
+    public Task<string> SaveWorkflowBackupAsync(string workflowId, string? name, JsonNode? workflow, CancellationToken ct = default) =>
+        SaveAsync(BuildSuffix("workflow", workflowId, name), workflow, ct);
 
-    public Task<string> SaveDataTableBackupAsync(string tableId, JsonNode? table, JsonArray rows, CancellationToken ct = default)
+    public Task<string> SaveDataTableBackupAsync(string tableId, string? name, JsonNode? table, JsonArray rows, CancellationToken ct = default)
     {
         var payload = new JsonObject
         {
             ["table"] = table?.DeepClone(),
             ["rows"] = rows
         };
-        return SaveAsync($"datatable-{SanitizeIdForFileName(tableId)}", payload, ct);
+        return SaveAsync(BuildSuffix("datatable", tableId, name), payload, ct);
     }
 
     private async Task<string> SaveAsync(string suffix, JsonNode? content, CancellationToken ct)
@@ -35,7 +36,7 @@ public sealed class BackupService
         var fileName = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{suffix}.json";
         var path = Path.Combine(_backupDir, fileName);
         await File.WriteAllTextAsync(path, content?.ToJsonString() ?? "{}", ct);
-        return path;
+        return fileName;
     }
 
     public IReadOnlyList<(string FileName, DateTime ModifiedUtc, long SizeBytes)> ListBackups(string? filter)
@@ -60,10 +61,42 @@ public sealed class BackupService
         return JsonNode.Parse(content);
     }
 
-    private static string SanitizeIdForFileName(string id)
+    public string? ResolveBackupPath(string fileName)
     {
-        var invalid = Path.GetInvalidFileNameChars();
-        var chars = id.Select(c => invalid.Contains(c) ? '_' : c).ToArray();
-        return new string(chars);
+        var path = Path.Combine(_backupDir, Path.GetFileName(fileName));
+        return File.Exists(path) ? path : null;
+    }
+
+    private static string BuildSuffix(string kind, string id, string? name)
+    {
+        var idPart = SanitizeForFileName(id);
+        var namePart = string.IsNullOrWhiteSpace(name) ? null : SanitizeForFileName(name);
+        return string.IsNullOrEmpty(namePart) ? $"{kind}-{idPart}" : $"{kind}-{namePart}-{idPart}";
+    }
+
+    private static string SanitizeForFileName(string value)
+    {
+        const int maxLength = 40;
+        var builder = new StringBuilder(Math.Min(value.Length, maxLength));
+        var lastWasUnderscore = false;
+        foreach (var c in value)
+        {
+            var isSafe = c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '-' or '_';
+            if (isSafe)
+            {
+                builder.Append(c);
+                lastWasUnderscore = c == '_';
+            }
+            else if (!lastWasUnderscore)
+            {
+                builder.Append('_');
+                lastWasUnderscore = true;
+            }
+
+            if (builder.Length >= maxLength)
+                break;
+        }
+
+        return builder.ToString().Trim('_');
     }
 }

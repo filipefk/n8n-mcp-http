@@ -19,7 +19,9 @@ public class McpToolsTests : IDisposable
     {
         var client = TestFactories.BuildMcpClient(handler);
         var backups = TestFactories.BuildBackupService(_tempDir);
-        return new global::McpToolkit.McpTools(client, backups);
+        var httpContextAccessor = TestFactories.BuildHttpContextAccessor();
+        var options = Microsoft.Extensions.Options.Options.Create(new McpToolkit.McpOptions { PublicBaseUrl = "https://mcp.test" });
+        return new global::McpToolkit.McpTools(client, backups, httpContextAccessor, options);
     }
 
     [Fact]
@@ -112,7 +114,8 @@ public class McpToolsTests : IDisposable
         var result = JsonNode.Parse(await tools.update_workflow_node("wf1", "Node1", """{"disabled":true}"""))!.AsObject();
 
         var backupFile = result["backupFile"]!.GetValue<string>();
-        Assert.True(File.Exists(backupFile));
+        Assert.True(File.Exists(Path.Combine(_tempDir, backupFile)));
+        Assert.Equal($"https://mcp.test/backups/{backupFile}", result["backupUrl"]!.GetValue<string>());
         Assert.Contains("Node1", result["nodes"]!.AsArray().Select(n => n!.GetValue<string>()));
     }
 
@@ -196,7 +199,9 @@ public class McpToolsTests : IDisposable
         var result = JsonNode.Parse(await tools.delete_workflow("wf1"))!.AsObject();
 
         Assert.True(result["deleted"]!.GetValue<bool>());
-        Assert.True(File.Exists(result["backupFile"]!.GetValue<string>()));
+        var backupFile = result["backupFile"]!.GetValue<string>();
+        Assert.True(File.Exists(Path.Combine(_tempDir, backupFile)));
+        Assert.Equal($"https://mcp.test/backups/{backupFile}", result["backupUrl"]!.GetValue<string>());
         Assert.Equal(HttpMethod.Delete, handler.Requests[1].Method);
     }
 
@@ -365,5 +370,107 @@ public class McpToolsTests : IDisposable
 
         Assert.Single(result);
         Assert.Equal("wf1", result[0]!["workflowId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task backup_workflow_ReturnsBackupUrl_PointingToConfiguredPublicBaseUrl()
+    {
+        var handler = new FakeHttpMessageHandler().Enqueue(HttpStatusCode.OK, new JsonObject { ["name"] = "WF" }.ToJsonString());
+        var tools = BuildTools(handler);
+
+        var result = JsonNode.Parse(await tools.backup_workflow("wf1"))!.AsObject();
+
+        var backupFile = result["backupFile"]!.GetValue<string>();
+        Assert.Equal($"https://mcp.test/backups/{backupFile}", result["backupUrl"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task list_backups_IncludesDownloadUrlPerItem()
+    {
+        var handler = new FakeHttpMessageHandler().Enqueue(HttpStatusCode.OK, new JsonObject { ["name"] = "WF" }.ToJsonString());
+        var tools = BuildTools(handler);
+        var backupResult = JsonNode.Parse(await tools.backup_workflow("wf1"))!.AsObject();
+        var backupFile = backupResult["backupFile"]!.GetValue<string>();
+
+        var list = JsonNode.Parse(tools.list_backups())!.AsArray();
+
+        var item = Assert.Single(list, b => b!["fileName"]!.GetValue<string>() == backupFile);
+        Assert.Equal($"https://mcp.test/backups/{backupFile}", item!["downloadUrl"]!.GetValue<string>());
+    }
+
+    private static JsonObject BuildDataTableWithOneColumn() => new()
+    {
+        ["id"] = "t1",
+        ["name"] = "Tabela",
+        ["columns"] = new JsonArray { new JsonObject { ["id"] = "c1", ["name"] = "col", ["type"] = "string" } }
+    };
+
+    [Fact]
+    public async Task backup_data_table_restore_data_table_backup_RoundTrip_ReplacesTableAndReinsertsRows()
+    {
+        var rowsPage = new JsonObject
+        {
+            ["data"] = new JsonArray { new JsonObject { ["id"] = 1, ["col"] = "val", ["createdAt"] = "2026-01-01", ["updatedAt"] = "2026-01-01" } },
+            ["nextCursor"] = null
+        };
+        var handler = new FakeHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, BuildDataTableWithOneColumn().ToJsonString())
+            .Enqueue(HttpStatusCode.OK, rowsPage.ToJsonString());
+        var tools = BuildTools(handler);
+
+        var backupResult = JsonNode.Parse(await tools.backup_data_table("t1"))!.AsObject();
+        var backupFile = backupResult["backupFile"]!.GetValue<string>();
+        Assert.Contains("Tabela", backupFile);
+
+        handler.Enqueue(HttpStatusCode.OK, "");
+        handler.Enqueue(HttpStatusCode.OK, new JsonObject { ["id"] = "t2", ["name"] = "Tabela" }.ToJsonString());
+        handler.Enqueue(HttpStatusCode.OK, """{"count":1}""");
+
+        var restoreResult = JsonNode.Parse(await tools.restore_data_table_backup(backupFile))!.AsObject();
+
+        Assert.Equal("t2", restoreResult["tableId"]!.GetValue<string>());
+        Assert.Equal(1, restoreResult["rowsRestored"]!.GetValue<int>());
+        Assert.Equal(1, restoreResult["columnsRestored"]!.GetValue<int>());
+
+        Assert.Equal(HttpMethod.Delete, handler.Requests[2].Method);
+        Assert.EndsWith("data-tables/t1", handler.Requests[2].Uri.AbsolutePath, StringComparison.Ordinal);
+
+        Assert.Equal(HttpMethod.Post, handler.Requests[3].Method);
+        var createdBody = JsonNode.Parse(handler.Requests[3].Body!)!.AsObject();
+        Assert.Equal("Tabela", createdBody["name"]!.GetValue<string>());
+        var sentColumns = createdBody["columns"]!.AsArray();
+        Assert.Single(sentColumns);
+        Assert.Equal("col", sentColumns[0]!["name"]!.GetValue<string>());
+        Assert.False(sentColumns[0]!.AsObject().ContainsKey("id"));
+
+        Assert.Equal(HttpMethod.Post, handler.Requests[4].Method);
+        Assert.EndsWith("data-tables/t2/rows", handler.Requests[4].Uri.AbsolutePath, StringComparison.Ordinal);
+        var insertedBody = JsonNode.Parse(handler.Requests[4].Body!)!.AsObject();
+        var insertedRows = insertedBody["data"]!.AsArray();
+        Assert.Single(insertedRows);
+        Assert.False(insertedRows[0]!.AsObject().ContainsKey("id"));
+        Assert.False(insertedRows[0]!.AsObject().ContainsKey("createdAt"));
+        Assert.False(insertedRows[0]!.AsObject().ContainsKey("updatedAt"));
+        Assert.Equal("val", insertedRows[0]!["col"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task restore_data_table_backup_RecreatesTable_WhenOriginalWasDeleted()
+    {
+        var rowsPage = new JsonObject { ["data"] = new JsonArray(), ["nextCursor"] = null };
+        var handler = new FakeHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, BuildDataTableWithOneColumn().ToJsonString())
+            .Enqueue(HttpStatusCode.OK, rowsPage.ToJsonString());
+        var tools = BuildTools(handler);
+        var backupResult = JsonNode.Parse(await tools.backup_data_table("t1"))!.AsObject();
+        var backupFile = backupResult["backupFile"]!.GetValue<string>();
+
+        handler.Enqueue(HttpStatusCode.NotFound, "tabela excluída");
+        handler.Enqueue(HttpStatusCode.OK, new JsonObject { ["id"] = "t3", ["name"] = "Tabela" }.ToJsonString());
+
+        var restoreResult = JsonNode.Parse(await tools.restore_data_table_backup(backupFile))!.AsObject();
+
+        Assert.Equal("t3", restoreResult["tableId"]!.GetValue<string>());
+        Assert.Equal(0, restoreResult["rowsRestored"]!.GetValue<int>());
     }
 }

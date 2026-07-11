@@ -14,7 +14,7 @@ Servidor MCP (Model Context Protocol) para integração com o n8n, exposto via H
 ## Obtendo a API Key do n8n
 
 1. Faça login no n8n
-2. Selecione o menu Settings, a esquerda em baixo, e escolha a opção **N8n API**
+2. Selecione o menu Settings, a esquerda em baixo, e escolha a opção **n8n API**
 2. Clique em **"Create an API Key"**
 3. Dê um nome, escolha a expiração e selecione as permissões que esta API Key terá (podem ser editadas depois) e clique em Save
 4. Copie o valor gerado — será usado como `X-N8N-API-KEY`
