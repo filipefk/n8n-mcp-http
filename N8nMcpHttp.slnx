@@ -5,6 +5,12 @@
     <File Path="N8nMcpHttp.postman_environment.json" />
     <File Path="README.md" />
   </Folder>
-  <Project Path="McpToolkit/McpToolkit.csproj" />
-  <Project Path="N8nMcpHttp/N8nMcpHttp.csproj" />
+  <Folder Name="/src/" />
+  <Folder Name="/src/Backend/">
+    <Project Path="src/Backend/McpToolkit/McpToolkit.csproj" />
+    <Project Path="src/Backend/N8nMcpHttp/N8nMcpHttp.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/McpTests/McpTests.csproj" Id="89b15ac8-357c-4b74-946f-2d824063fc60" />
+  </Folder>
 </Solution>

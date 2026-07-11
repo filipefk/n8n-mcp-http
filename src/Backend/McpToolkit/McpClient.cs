@@ -191,6 +191,15 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
                     if (targets[i]?["node"]?.GetValue<string>() == nodeName)
                         targets.RemoveAt(i);
         }
+
+        var emptyKeys = connections
+            .Where(kv => kv.Value is JsonObject entryObj
+                && (entryObj["main"] is not JsonArray outputs || outputs.OfType<JsonArray>().All(a => a.Count == 0)))
+            .Select(kv => kv.Key)
+            .ToList();
+
+        foreach (var key in emptyKeys)
+            connections.Remove(key);
     }
 
     private static void RenameConnectionKey(JsonObject connections, string oldName, string newName)

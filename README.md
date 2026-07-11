@@ -32,7 +32,7 @@ X-N8N-API-KEY: <sua-api-key>
 
 ### Credenciais globais (fallback)
 
-Crie o arquivo `N8nMcpHttp/N8nMcpHttp/appsettings.Development.json` (ignorado pelo git) com suas credenciais:
+Crie o arquivo `src/Backend/N8nMcpHttp/appsettings.Development.json` (ignorado pelo git) com suas credenciais:
 
 ```json
 {
@@ -145,6 +145,8 @@ Antes de qualquer operação destrutiva (`update_workflow`, `delete_workflow`, a
 
 O protocolo MCP sobre HTTP usa o padrão JSON-RPC 2.0. Todas as chamadas são feitas via `POST /mcp`.
 
+Na raiz do repositório estão disponíveis os arquivos [`N8nMcpHttp.postman_collection.json`](N8nMcpHttp.postman_collection.json) e [`N8nMcpHttp.postman_environment.json`](N8nMcpHttp.postman_environment.json), prontos para importar no Postman e testar as chamadas descritas abaixo sem precisar montá-las manualmente.
+
 ### 1. Inicializar a sessão
 
 Antes de chamar qualquer tool, é necessário enviar a mensagem de inicialização do protocolo MCP.
@@ -239,12 +241,13 @@ Para descobrir todas as tools expostas pelo servidor:
 ## Arquitetura
 
 ```
-N8nMcpHttp/N8nMcpHttp/Program.cs                          — bootstrap: registra serviços e monta o servidor MCP
-N8nMcpHttp/N8nMcpHttp/Middleware/McpTrafficLoggingMiddleware.cs — loga request/response completos sob /mcp
-N8nMcpHttp/McpToolkit/McpOptions.cs                        — POCO com Url, ApiKey e BackupDir mapeados do appsettings.json
-N8nMcpHttp/McpToolkit/McpClient.cs                         — wrapper sobre HttpClient para a API REST do n8n
-N8nMcpHttp/McpToolkit/McpTools.cs                          — tools MCP expostas via atributos [McpServerTool]
-N8nMcpHttp/McpToolkit/BackupService.cs                     — salva/lista/lê snapshots JSON em disco antes de operações destrutivas
+src/Backend/N8nMcpHttp/Program.cs                          — bootstrap: registra serviços e monta o servidor MCP
+src/Backend/N8nMcpHttp/Middleware/McpTrafficLoggingMiddleware.cs — loga request/response completos sob /mcp
+src/Backend/McpToolkit/McpOptions.cs                       — POCO com Url, ApiKey e BackupDir mapeados do appsettings.json
+src/Backend/McpToolkit/McpClient.cs                        — wrapper sobre HttpClient para a API REST do n8n
+src/Backend/McpToolkit/McpTools.cs                         — tools MCP expostas via atributos [McpServerTool]
+src/Backend/McpToolkit/BackupService.cs                    — salva/lista/lê snapshots JSON em disco antes de operações destrutivas
+tests/McpTests/                                            — projeto de testes xUnit para o McpToolkit
 ```
 
 O `McpClient` resolve o destino priorizando os headers `X-N8N-URL` / `X-N8N-API-KEY` da requisição atual, com fallback para `McpOptions` (`appsettings.json`). Isso permite que uma única instância do servidor atenda múltiplas instâncias n8n, uma por requisição.
@@ -252,6 +255,14 @@ O `McpClient` resolve o destino priorizando os headers `X-N8N-URL` / `X-N8N-API-
 A API de criação/atualização de workflow do n8n só aceita os campos `name`, `nodes`, `connections` e `settings` — o `McpClient` filtra o payload para conter apenas esses campos antes de cada chamada, e implementa atualizações parciais no lado do cliente (faz `GET` do workflow atual, mescla os campos alterados e envia o resultado filtrado). As ferramentas de edição granular de node (`update_workflow_node`, `add_workflow_node`, `delete_workflow_node`, `rename_workflow_node`) seguem o mesmo padrão, mas mesclando apenas o node/conexão alterado antes do `PUT`.
 
 O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções, aceita URL do editor n8n como `workflow_id`, e delega ao `BackupService` o snapshot automático antes de operações destrutivas — o conteúdo do backup fica em disco (pasta `backups/` por padrão) e só o caminho do arquivo retorna na resposta da ferramenta.
+
+## Testes
+
+```bash
+dotnet test tests/McpTests/McpTests.csproj
+```
+
+Os testes cobrem o `McpToolkit` (`McpClient`, `McpTools`, `BackupService`) sem depender de uma instância real do n8n nem de mocking frameworks: um `HttpMessageHandler` fake (`tests/McpTests/Fakes/FakeHttpMessageHandler.cs`) simula as respostas da API REST do n8n, e o `BackupService` é exercitado com um diretório temporário real.
 
 ## Stack
 

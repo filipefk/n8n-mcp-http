@@ -10,21 +10,31 @@ N8nMcpHttp é um servidor MCP (Model Context Protocol) em .NET 10 ASP.NET Core q
 
 ```
 dotnet build N8nMcpHttp.slnx
-dotnet run --project N8nMcpHttp/N8nMcpHttp/N8nMcpHttp.csproj
+dotnet run --project src/Backend/N8nMcpHttp/N8nMcpHttp.csproj
 ```
 
-Não há projetos de teste nesta solução.
+```
+dotnet test tests/McpTests/McpTests.csproj
+```
+
+Projeto de testes em `tests/McpTests` (xUnit), cobrindo o `McpToolkit` (`McpClient`, `McpTools`, `BackupService`). `McpClient` e `BackupService` são `sealed` sem interfaces — os testes instanciam as classes reais e fakeiam só as bordas: um `FakeHttpMessageHandler` escrito à mão (`Fakes/FakeHttpMessageHandler.cs`, sem dependência de mocking framework) no lugar da API REST do n8n, e um diretório temporário real para o `BackupService` (via `Fakes/FakeHostEnvironment.cs` e os helpers em `TestFactories`). Cobertura completa nos pontos com lógica própria (`ResolveTarget`, `FilterWorkflowPayload`, os quatro métodos de edição de node, `ParseObject`/`ParseArray`, `ResolveWorkflowId`, os helpers de sumarização, `BackupService` inteiro); os métodos de CRUD simples (tags, data tables, execuções) têm só 1-2 testes representativos por família.
 
 ## Arquitetura
 
-Dois projetos:
+```
+src/Backend/McpToolkit/    — biblioteca McpToolkit
+src/Backend/N8nMcpHttp/    — host ASP.NET Core
+tests/McpTests/            — projeto de testes xUnit
+```
 
-- **McpToolkit** (`N8nMcpHttp/McpToolkit`) — biblioteca de classes sem dependência do ASP.NET além do `FrameworkReference`. Contém:
+Dois projetos de código, mais um de testes:
+
+- **McpToolkit** (`src/Backend/McpToolkit`) — biblioteca de classes sem dependência do ASP.NET além do `FrameworkReference`. Contém:
   - `McpClient.cs` — o único lugar que se comunica com a API REST do n8n. Encapsula o `HttpClient`, monta as requisições e expõe um método assíncrono para cada operação da API do n8n (workflows, data tables, execuções, tags), incluindo métodos compostos de edição granular de node (`UpdateWorkflowNodeAsync`, `AddWorkflowNodeAsync`, `DeleteWorkflowNodeAsync`, `RenameWorkflowNodeAsync` — todos fazem GET → transforma em memória → PUT via `FilterWorkflowPayload`, no mesmo padrão de `UpdateWorkflowAsync`). Todas as respostas são `JsonNode?` brutos.
   - `McpTools.cs` — a superfície voltada ao MCP. Uma única classe `[McpServerToolType]` onde todo método público é anotado com `[McpServerTool]` e se torna uma ferramenta MCP invocável. Cada método de ferramenta é um wrapper simples: faz o parse dos parâmetros em string (os argumentos JSON chegam como strings brutas, ex. `nodes_json`, `filter_json`) via os helpers locais `ParseObject`/`ParseArray`, chama o método correspondente do `McpClient` e retorna `ToJsonString()`. Também concentra a economia de tokens: helpers de projeção (`SummarizeWorkflowListItem`, `BuildWorkflowChangeSummary`, `SummarizeExecution`) reduzem o JSON devolvido à IA, `ResolveWorkflowId` aceita URL do editor n8n em qualquer parâmetro `workflow_id`, e os wrappers de backup (`BackupWorkflowAsync`/`BackupDataTableAsync`) chamam o `BackupService` antes de operações destrutivas.
   - `McpOptions.cs` — vincula a seção de configuração `N8n` (`Url`, `ApiKey`, `BackupDir`).
   - `BackupService.cs` — salva snapshots JSON em disco (`BackupDir`, padrão `backups/` na raiz do host) antes de operações destrutivas de workflow/data table, lista esses arquivos e lê um arquivo específico para restauração. Retorna apenas o caminho do arquivo às ferramentas MCP — o conteúdo do backup nunca é devolvido à IA, só o nome do arquivo.
-- **N8nMcpHttp** (`N8nMcpHttp/N8nMcpHttp`) — o host ASP.NET Core. O `Program.cs` configura o Serilog, registra o `McpClient` via `AddHttpClient`, registra o `BackupService` como singleton, registra o `McpTools` via `AddMcpServer().WithHttpTransport().WithTools<McpTools>()` e mapeia o endpoint MCP em `/mcp`. O `Middleware/McpTrafficLoggingMiddleware.cs` registra os corpos e cabeçalhos completos de requisição/resposta para qualquer chamada sob `/mcp` (redigindo o cabeçalho `X-N8N-API-KEY`), fazendo buffer de ambos os streams para que possam ser lidos e reproduzidos.
+- **N8nMcpHttp** (`src/Backend/N8nMcpHttp`) — o host ASP.NET Core. O `Program.cs` configura o Serilog, registra o `McpClient` via `AddHttpClient`, registra o `BackupService` como singleton, registra o `McpTools` via `AddMcpServer().WithHttpTransport().WithTools<McpTools>()` e mapeia o endpoint MCP em `/mcp`. O `Middleware/McpTrafficLoggingMiddleware.cs` registra os corpos e cabeçalhos completos de requisição/resposta para qualquer chamada sob `/mcp` (redigindo o cabeçalho `X-N8N-API-KEY`), fazendo buffer de ambos os streams para que possam ser lidos e reproduzidos.
 
 ## Resolução do destino n8n (override por requisição)
 
