@@ -97,7 +97,7 @@ public class McpToolsTests : IDisposable
     }
 
     [Fact]
-    public async Task update_workflow_node_BacksUpFirst_AndReturnsChangeSummaryWithExistingBackupFile()
+    public async Task update_workflow_node_ReturnsChangeSummary_WithoutBackupFile()
     {
         var workflow = new JsonObject
         {
@@ -107,16 +107,14 @@ public class McpToolsTests : IDisposable
         };
         var handler = new FakeHttpMessageHandler()
             .Enqueue(HttpStatusCode.OK, workflow.ToJsonString())
-            .Enqueue(HttpStatusCode.OK, workflow.ToJsonString())
             .Enqueue(HttpStatusCode.OK, workflow.ToJsonString());
         var tools = BuildTools(handler);
 
         var result = JsonNode.Parse(await tools.update_workflow_node("wf1", "Node1", """{"disabled":true}"""))!.AsObject();
 
-        var backupFile = result["backupFile"]!.GetValue<string>();
-        Assert.True(File.Exists(Path.Combine(_tempDir, backupFile)));
-        Assert.Equal($"https://mcp.test/backups/{backupFile}", result["backupUrl"]!.GetValue<string>());
         Assert.Contains("Node1", result["nodes"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.False(result.ContainsKey("backupFile"));
+        Assert.False(result.ContainsKey("backupUrl"));
     }
 
     [Fact]
@@ -188,21 +186,18 @@ public class McpToolsTests : IDisposable
     }
 
     [Fact]
-    public async Task delete_workflow_BacksUpBeforeDeleting_AndReturnsBackupFileInResponse()
+    public async Task delete_workflow_DeletesWithoutBackingUp_AndReturnsDeletedConfirmation()
     {
-        var workflow = new JsonObject { ["name"] = "WF", ["nodes"] = new JsonArray() };
-        var handler = new FakeHttpMessageHandler()
-            .Enqueue(HttpStatusCode.OK, workflow.ToJsonString())
-            .Enqueue(HttpStatusCode.OK, "");
+        var handler = new FakeHttpMessageHandler().Enqueue(HttpStatusCode.OK, "");
         var tools = BuildTools(handler);
 
         var result = JsonNode.Parse(await tools.delete_workflow("wf1"))!.AsObject();
 
         Assert.True(result["deleted"]!.GetValue<bool>());
-        var backupFile = result["backupFile"]!.GetValue<string>();
-        Assert.True(File.Exists(Path.Combine(_tempDir, backupFile)));
-        Assert.Equal($"https://mcp.test/backups/{backupFile}", result["backupUrl"]!.GetValue<string>());
-        Assert.Equal(HttpMethod.Delete, handler.Requests[1].Method);
+        Assert.Equal("wf1", result["id"]!.GetValue<string>());
+        Assert.False(result.ContainsKey("backupFile"));
+        Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Delete, handler.Requests[0].Method);
     }
 
     private static JsonObject BuildExecutionWithError() => new()

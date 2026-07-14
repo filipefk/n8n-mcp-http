@@ -51,15 +51,36 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         return query.Length == 0 ? string.Empty : $"?{query}";
     }
 
+    private static readonly string[] AllowedSettingsKeys =
+    [
+        "saveExecutionProgress", "saveManualExecutions", "saveDataErrorExecution",
+        "saveDataSuccessExecution", "executionTimeout", "errorWorkflow", "timezone",
+        "executionOrder", "callerPolicy", "callerIds"
+    ];
+
     private static JsonObject FilterWorkflowPayload(JsonObject source, string? overrideName = null)
     {
         var name = overrideName ?? source["name"]?.GetValue<string>() ?? string.Empty;
+
+        JsonObject settings;
+        if (source["settings"] is JsonObject settingsSource)
+        {
+            settings = new JsonObject();
+            foreach (var key in AllowedSettingsKeys)
+                if (settingsSource[key] is JsonNode value)
+                    settings[key] = value.DeepClone();
+        }
+        else
+        {
+            settings = new JsonObject { ["executionOrder"] = "v1" };
+        }
+
         return new JsonObject
         {
             ["name"] = name,
             ["nodes"] = source["nodes"]?.DeepClone() ?? new JsonArray(),
             ["connections"] = source["connections"]?.DeepClone() ?? new JsonObject(),
-            ["settings"] = source["settings"]?.DeepClone() ?? new JsonObject { ["executionOrder"] = "v1" }
+            ["settings"] = settings
         };
     }
 

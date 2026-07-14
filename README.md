@@ -136,13 +136,13 @@ As ferramentas de escrita de workflow (`create_workflow`, `update_workflow`, `du
 
 | Tool | Descrição |
 |------|-----------|
-| `backup_workflow` | Faz um backup manual de um workflow, sem estar vinculado a uma operação de alteração |
-| `backup_data_table` | Faz um backup manual de uma data table (colunas + todas as linhas) |
+| `backup_workflow` | Faz um backup de um workflow |
+| `backup_data_table` | Faz um backup de uma data table (colunas + todas as linhas) |
 | `list_backups` | Lista os arquivos de backup salvos pelo servidor (nome, data, tamanho, link de download) |
 | `restore_workflow_backup` | Restaura um workflow a partir de um arquivo de backup (sobrescreve se ainda existir, recria se foi excluído) |
 | `restore_data_table_backup` | Restaura uma data table a partir de um arquivo de backup — substituição total: exclui a tabela atual (se existir) e recria do zero com colunas e linhas do backup (o ID sempre muda) |
 
-Antes de qualquer operação destrutiva (`update_workflow`, `delete_workflow`, as ferramentas de edição de node, `update_data_table_rows`, `delete_data_table_rows`, `delete_data_table_column`, `delete_data_table`), o servidor salva automaticamente um snapshot do estado atual e devolve, no resultado da ferramenta, o nome do arquivo (`backupFile`, usado para restaurar) e um link de download (`backupUrl`) — o conteúdo do backup nunca passa pela IA.
+O servidor não faz mais backup automaticamente antes de operações destrutivas (`update_workflow`, `delete_workflow`, as ferramentas de edição de node, `update_data_table_rows`, `delete_data_table_rows`, `delete_data_table_column`, `delete_data_table`) — as descrições dessas ferramentas apenas recomendam chamar `backup_workflow`/`backup_data_table` antes de alterar ou excluir algo existente. Quando chamadas, essas ferramentas salvam um snapshot em disco e devolvem o nome do arquivo (`backupFile`, usado para restaurar) e um link de download (`backupUrl`) — o conteúdo do backup nunca passa pela IA.
 
 #### Baixando um backup
 
@@ -261,7 +261,7 @@ O `McpClient` resolve o destino priorizando os headers `X-N8N-URL` / `X-N8N-API-
 
 A API de criação/atualização de workflow do n8n só aceita os campos `name`, `nodes`, `connections` e `settings` — o `McpClient` filtra o payload para conter apenas esses campos antes de cada chamada, e implementa atualizações parciais no lado do cliente (faz `GET` do workflow atual, mescla os campos alterados e envia o resultado filtrado). As ferramentas de edição granular de node (`update_workflow_node`, `add_workflow_node`, `delete_workflow_node`, `rename_workflow_node`) seguem o mesmo padrão, mas mesclando apenas o node/conexão alterado antes do `PUT`.
 
-O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções, aceita URL do editor n8n como `workflow_id`, e delega ao `BackupService` o snapshot automático antes de operações destrutivas. O nome do arquivo de backup inclui o nome sanitizado do workflow/tabela além do ID (ex: `20260711-153000-workflow-MeuFluxo-abc123.json`). O conteúdo do backup fica em disco (pasta `backups/` por padrão) e nunca passa pela IA — a ferramenta retorna apenas o nome do arquivo (`backupFile`) e um link de download (`backupUrl`), montado por `McpTools.BuildBackupUrl` a partir de `N8n:PublicBaseUrl` ou, na ausência dele, do host da própria requisição MCP. O endpoint `GET /backups/{fileName}` (`Program.cs`) é aberto, sem autenticação — serve o arquivo direto se ele existir.
+O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções, aceita URL do editor n8n como `workflow_id`, e delega ao `BackupService` o snapshot sob demanda quando `backup_workflow`/`backup_data_table` são chamados explicitamente (não há mais backup automático antes de operações destrutivas). O nome do arquivo de backup inclui o nome sanitizado do workflow/tabela além do ID (ex: `20260711-153000-workflow-MeuFluxo-abc123.json`). O conteúdo do backup fica em disco (pasta `backups/` por padrão) e nunca passa pela IA — a ferramenta retorna apenas o nome do arquivo (`backupFile`) e um link de download (`backupUrl`), montado por `McpTools.BuildBackupUrl` a partir de `N8n:PublicBaseUrl` ou, na ausência dele, do host da própria requisição MCP. O endpoint `GET /backups/{fileName}` (`Program.cs`) é aberto, sem autenticação — serve o arquivo direto se ele existir.
 
 ## Testes
 
