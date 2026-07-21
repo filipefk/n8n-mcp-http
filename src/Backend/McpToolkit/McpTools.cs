@@ -182,7 +182,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
 
     // ---------- Workflows ----------
 
-    [McpServerTool, Description("Lista os workflows do n8n, com filtros opcionais por nome e por estado ativo. Resposta resumida por item (id, name, active, createdAt, updatedAt, tags, nodeCount) — use get_workflow para o conteúdo completo de um workflow específico. Resposta paginada (verifique nextCursor).")]
+    [McpServerTool(Title = "Listar workflows", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista os workflows do n8n, com filtros opcionais por nome e por estado ativo. Resposta resumida por item (id, name, active, createdAt, updatedAt, tags, nodeCount) — use get_workflow para o conteúdo completo de um workflow específico. Resposta paginada (verifique nextCursor).")]
     public async Task<string> list_workflows(
         [Description("Filtra pelo nome do workflow (opcional)")] string? name = null,
         [Description("Filtra por estado ativo: true, false ou null para não filtrar")] bool? active = null,
@@ -196,7 +196,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Procura um texto em todos os workflows do n8n (nome do workflow, nome/tipo dos nodes e parâmetros de cada node), paginando automaticamente. Retorna apenas os workflows e nodes que casaram, evitando N chamadas de get_workflow para localizar onde algo é usado.")]
+    [McpServerTool(Title = "Buscar texto nos workflows", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Procura um texto em todos os workflows do n8n (nome do workflow, nome/tipo dos nodes e parâmetros de cada node), paginando automaticamente. Retorna apenas os workflows e nodes que casaram, evitando N chamadas de get_workflow para localizar onde algo é usado.")]
     public async Task<string> find_in_workflows(
         [Description("Texto a procurar (case-insensitive)")] string search,
         [Description("Filtra por estado ativo: true, false ou null para não filtrar (opcional)")] bool? active = null,
@@ -224,7 +224,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return matches.ToJsonString();
     }
 
-    [McpServerTool, Description("Obtém o JSON de um workflow do n8n (nodes, connections, settings, active, tags). Por padrão omite pinData/staticData/meta/shared para reduzir o tamanho da resposta; use full=true para obter o workflow completo.")]
+    [McpServerTool(Title = "Obter workflow", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Obtém o JSON de um workflow do n8n (nodes, connections, settings, active, tags). Por padrão omite pinData/staticData/meta/shared para reduzir o tamanho da resposta; use full=true para obter o workflow completo.")]
     public async Task<string> get_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Se true, retorna o workflow completo incluindo pinData/staticData/meta/shared")] bool full = false,
@@ -242,7 +242,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Lista os nodes de um workflow do n8n, com nome, tipo e se está desabilitado.")]
+    [McpServerTool(Title = "Listar nodes do workflow", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista os nodes de um workflow do n8n, com nome, tipo e se está desabilitado.")]
     public async Task<string> get_workflow_nodes(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -259,7 +259,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return summary.ToJsonString();
     }
 
-    [McpServerTool, Description("Obtém o JSON completo de um único node de um workflow do n8n, pelo nome do node.")]
+    [McpServerTool(Title = "Obter node do workflow", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Obtém o JSON completo de um único node de um workflow do n8n, pelo nome do node.")]
     public async Task<string> get_workflow_node(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Nome do node")] string node_name,
@@ -273,7 +273,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return node.ToJsonString();
     }
 
-    [McpServerTool, Description("Altera parâmetros de um node existente de um workflow do n8n sem reenviar o workflow inteiro: aplica um merge profundo do patch informado sobre o node (ex: apenas {\"parameters\":{\"url\":\"...\"}}). Recomenda-se chamar backup_workflow antes, pois esta ferramenta sobrescreve o node existente.")]
+    [McpServerTool(Title = "Atualizar node do workflow", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Altera parâmetros de um node existente de um workflow do n8n sem reenviar o workflow inteiro: aplica um merge profundo do patch informado sobre o node (ex: apenas {\"parameters\":{\"url\":\"...\"}}). Recomenda-se chamar backup_workflow antes, pois esta ferramenta sobrescreve o node existente.")]
     public async Task<string> update_workflow_node(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Nome do node a alterar")] string node_name,
@@ -286,7 +286,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Adiciona um novo node a um workflow existente do n8n, opcionalmente conectando-o a nodes já existentes (conecta pela saída/entrada principal, main, índice 0). Gera 'id' e 'position' automaticamente se ausentes no node informado.")]
+    [McpServerTool(Title = "Adicionar node ao workflow", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Adiciona um novo node a um workflow existente do n8n, opcionalmente conectando-o a nodes já existentes (conecta pela saída/entrada principal, main, índice 0). Gera 'id' e 'position' automaticamente se ausentes no node informado.")]
     public async Task<string> add_workflow_node(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Objeto JSON do node a adicionar (deve ter ao menos 'name' e 'type')")] string node_json,
@@ -300,7 +300,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Remove um node de um workflow do n8n, junto com todas as referências a ele em connections. Por padrão religa automaticamente os nodes que apontavam para ele diretamente aos nodes que ele apontava (reconnect=true). Recomenda-se chamar backup_workflow antes, pois esta ferramenta remove o node permanentemente.")]
+    [McpServerTool(Title = "Remover node do workflow", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Remove um node de um workflow do n8n, junto com todas as referências a ele em connections. Por padrão religa automaticamente os nodes que apontavam para ele diretamente aos nodes que ele apontava (reconnect=true). Recomenda-se chamar backup_workflow antes, pois esta ferramenta remove o node permanentemente.")]
     public async Task<string> delete_workflow_node(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Nome do node a remover")] string node_name,
@@ -312,7 +312,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Renomeia um node de um workflow do n8n, atualizando as referências em connections e as expressões $('Nome antigo') nos parâmetros dos demais nodes. Recomenda-se chamar backup_workflow antes, pois esta ferramenta altera o workflow existente.")]
+    [McpServerTool(Title = "Renomear node do workflow", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Renomeia um node de um workflow do n8n, atualizando as referências em connections e as expressões $('Nome antigo') nos parâmetros dos demais nodes. Recomenda-se chamar backup_workflow antes, pois esta ferramenta altera o workflow existente.")]
     public async Task<string> rename_workflow_node(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Nome atual do node")] string old_name,
@@ -324,7 +324,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Cria um novo workflow no n8n. O workflow é sempre criado inativo. O corpo enviado à API contém apenas name, nodes, connections e settings — demais campos são rejeitados pela API do n8n. Retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo.")]
+    [McpServerTool(Title = "Criar workflow", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Cria um novo workflow no n8n. O workflow é sempre criado inativo. O corpo enviado à API contém apenas name, nodes, connections e settings — demais campos são rejeitados pela API do n8n. Retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo.")]
     public async Task<string> create_workflow(
         [Description("Nome do workflow")] string name,
         [Description("Array JSON de nodes do workflow (padrão: [])")] string nodes_json = "[]",
@@ -343,7 +343,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Atualiza um workflow existente no n8n. Apenas os parâmetros informados são alterados; os demais mantêm o valor atual. Não altera o estado ativo (use activate_workflow/deactivate_workflow para isso). Recomenda-se chamar backup_workflow antes, pois esta ferramenta sobrescreve o workflow existente. Retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo.")]
+    [McpServerTool(Title = "Atualizar workflow", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Atualiza um workflow existente no n8n. Apenas os parâmetros informados são alterados; os demais mantêm o valor atual. Não altera o estado ativo (use activate_workflow/deactivate_workflow para isso). Recomenda-se chamar backup_workflow antes, pois esta ferramenta sobrescreve o workflow existente. Retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo.")]
     public async Task<string> update_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Novo nome do workflow (null para não alterar)")] string? new_name = null,
@@ -360,7 +360,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Duplica um workflow existente no n8n. A cópia é criada inativa. Retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo.")]
+    [McpServerTool(Title = "Duplicar workflow", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Duplica um workflow existente no n8n. A cópia é criada inativa. Retorna um resumo compacto (id, name, active, nodeCount, nodes) em vez do workflow completo.")]
     public async Task<string> duplicate_workflow(
         [Description("ID ou URL do workflow de origem")] string workflow_id,
         [Description("Nome da cópia (padrão: \"<nome original> (cópia)\")")] string? new_name = null,
@@ -371,7 +371,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Exclui permanentemente um workflow do n8n. Recomenda-se chamar backup_workflow antes, pois a exclusão é permanente (o backupFile retornado por backup_workflow pode ser usado com restore_workflow_backup para reverter).")]
+    [McpServerTool(Title = "Excluir workflow", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Exclui permanentemente um workflow do n8n. Recomenda-se chamar backup_workflow antes, pois a exclusão é permanente (o backupFile retornado por backup_workflow pode ser usado com restore_workflow_backup para reverter).")]
     public async Task<string> delete_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -381,7 +381,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return new JsonObject { ["deleted"] = true, ["id"] = id }.ToJsonString();
     }
 
-    [McpServerTool, Description("Ativa um workflow do n8n.")]
+    [McpServerTool(Title = "Ativar workflow", ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false), Description("Ativa um workflow do n8n.")]
     public async Task<string> activate_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -391,7 +391,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(result).ToJsonString();
     }
 
-    [McpServerTool, Description("Desativa um workflow do n8n.")]
+    [McpServerTool(Title = "Desativar workflow", ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false), Description("Desativa um workflow do n8n.")]
     public async Task<string> deactivate_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -403,7 +403,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
 
     // ---------- Data Tables ----------
 
-    [McpServerTool, Description("Lista as data tables do n8n, com filtro opcional pelo nome (aplicado localmente, sem distinção de maiúsculas/minúsculas, por substring).")]
+    [McpServerTool(Title = "Listar data tables", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista as data tables do n8n, com filtro opcional pelo nome (aplicado localmente, sem distinção de maiúsculas/minúsculas, por substring).")]
     public async Task<string> list_data_tables(
         [Description("Filtra pelo nome da tabela (opcional, substring, sem distinção de maiúsculas/minúsculas)")] string? name = null,
         [Description("Cursor de paginação retornado por uma chamada anterior (opcional)")] string? cursor = null,
@@ -422,7 +422,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Obtém uma data table do n8n, incluindo suas colunas (nome, tipo, índice).")]
+    [McpServerTool(Title = "Obter data table", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Obtém uma data table do n8n, incluindo suas colunas (nome, tipo, índice).")]
     public async Task<string> get_data_table(
         [Description("ID da data table")] string table_id,
         CancellationToken ct = default)
@@ -431,7 +431,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Cria uma nova data table no n8n. É necessário informar ao menos uma coluna — o schema é imutável após a criação (não é possível adicionar/remover colunas depois, exceto via create/delete_data_table_column).")]
+    [McpServerTool(Title = "Criar data table", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Cria uma nova data table no n8n. É necessário informar ao menos uma coluna — o schema é imutável após a criação (não é possível adicionar/remover colunas depois, exceto via create/delete_data_table_column).")]
     public async Task<string> create_data_table(
         [Description("Nome da tabela")] string name,
         [Description("Array JSON de colunas, ex: [{\"name\":\"email\",\"type\":\"string\"}]. Tipos válidos: string, number, boolean, date")] string columns_json,
@@ -443,7 +443,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Renomeia uma data table do n8n. Apenas o nome pode ser alterado — o schema (colunas) é imutável após a criação.")]
+    [McpServerTool(Title = "Renomear data table", ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false), Description("Renomeia uma data table do n8n. Apenas o nome pode ser alterado — o schema (colunas) é imutável após a criação.")]
     public async Task<string> update_data_table(
         [Description("ID da data table")] string table_id,
         [Description("Novo nome da tabela")] string name,
@@ -453,7 +453,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Exclui permanentemente uma data table do n8n, incluindo todas as suas colunas e linhas. Recomenda-se chamar backup_data_table antes, pois a exclusão é permanente (o backupFile retornado por backup_data_table pode ser usado com restore_data_table_backup para reverter).")]
+    [McpServerTool(Title = "Excluir data table", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Exclui permanentemente uma data table do n8n, incluindo todas as suas colunas e linhas. Recomenda-se chamar backup_data_table antes, pois a exclusão é permanente (o backupFile retornado por backup_data_table pode ser usado com restore_data_table_backup para reverter).")]
     public async Task<string> delete_data_table(
         [Description("ID da data table")] string table_id,
         CancellationToken ct = default)
@@ -462,7 +462,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return new JsonObject { ["deleted"] = true, ["id"] = table_id }.ToJsonString();
     }
 
-    [McpServerTool, Description("Lista as linhas de uma data table do n8n. Resposta paginada (verifique nextCursor).")]
+    [McpServerTool(Title = "Listar linhas da data table", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista as linhas de uma data table do n8n. Resposta paginada (verifique nextCursor).")]
     public async Task<string> get_data_table_rows(
         [Description("ID da data table")] string table_id,
         [Description("Quantidade máxima de linhas (padrão 100, máximo 250)")] int limit = 100,
@@ -473,7 +473,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Cria uma coluna em uma data table do n8n. Tipos válidos: string, number, boolean, date.")]
+    [McpServerTool(Title = "Criar coluna da data table", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Cria uma coluna em uma data table do n8n. Tipos válidos: string, number, boolean, date.")]
     public async Task<string> create_data_table_column(
         [Description("ID da data table")] string table_id,
         [Description("Nome da coluna")] string name,
@@ -484,7 +484,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Exclui uma coluna de uma data table do n8n. Recomenda-se chamar backup_data_table antes, pois a exclusão da coluna e de seus valores é permanente.")]
+    [McpServerTool(Title = "Excluir coluna da data table", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Exclui uma coluna de uma data table do n8n. Recomenda-se chamar backup_data_table antes, pois a exclusão da coluna e de seus valores é permanente.")]
     public async Task<string> delete_data_table_column(
         [Description("ID da data table")] string table_id,
         [Description("ID da coluna a excluir")] string column_id,
@@ -494,7 +494,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Insere uma ou mais linhas em uma data table do n8n.")]
+    [McpServerTool(Title = "Inserir linhas na data table", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Insere uma ou mais linhas em uma data table do n8n.")]
     public async Task<string> insert_data_table_rows(
         [Description("ID da data table")] string table_id,
         [Description("Array JSON de objetos a inserir, cada um com os nomes das colunas como chaves")] string rows_json,
@@ -506,7 +506,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Atualiza as linhas de uma data table do n8n que casarem com um filtro. Recomenda-se chamar backup_data_table antes, pois esta ferramenta sobrescreve as linhas existentes.")]
+    [McpServerTool(Title = "Atualizar linhas da data table", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Atualiza as linhas de uma data table do n8n que casarem com um filtro. Recomenda-se chamar backup_data_table antes, pois esta ferramenta sobrescreve as linhas existentes.")]
     public async Task<string> update_data_table_rows(
         [Description("ID da data table")] string table_id,
         [Description("Objeto JSON do filtro, ex: {\"type\":\"and\",\"filters\":[{\"columnName\":\"x\",\"condition\":\"eq\",\"value\":\"y\"}]}")] string filter_json,
@@ -520,7 +520,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Insere ou atualiza (upsert) linhas de uma data table do n8n: se uma linha casar com o filtro ela é atualizada, senão uma nova linha é inserida com os dados informados.")]
+    [McpServerTool(Title = "Inserir ou atualizar linhas da data table", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Insere ou atualiza (upsert) linhas de uma data table do n8n: se uma linha casar com o filtro ela é atualizada, senão uma nova linha é inserida com os dados informados.")]
     public async Task<string> upsert_data_table_rows(
         [Description("ID da data table")] string table_id,
         [Description("Objeto JSON do filtro, ex: {\"type\":\"and\",\"filters\":[{\"columnName\":\"x\",\"condition\":\"eq\",\"value\":\"y\"}]}")] string filter_json,
@@ -534,7 +534,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Exclui as linhas de uma data table do n8n que casarem com um filtro. O filtro é obrigatório para evitar exclusão acidental de todos os dados. Recomenda-se chamar backup_data_table antes, pois a exclusão é permanente.")]
+    [McpServerTool(Title = "Excluir linhas da data table", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Exclui as linhas de uma data table do n8n que casarem com um filtro. O filtro é obrigatório para evitar exclusão acidental de todos os dados. Recomenda-se chamar backup_data_table antes, pois a exclusão é permanente.")]
     public async Task<string> delete_data_table_rows(
         [Description("ID da data table")] string table_id,
         [Description("Objeto JSON do filtro, ex: {\"type\":\"and\",\"filters\":[{\"columnName\":\"x\",\"condition\":\"eq\",\"value\":\"y\"}]}")] string filter_json,
@@ -548,7 +548,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
 
     // ---------- Executions ----------
 
-    [McpServerTool, Description("Lista as execuções de workflows do n8n, com filtros opcionais por workflow e status. Resposta resumida por item (id, status, workflowId, mode, startedAt, stoppedAt e, se houve erro, errorNode/errorMessage); use include_data=true para trazer o payload completo de cada execução. Resposta paginada (verifique nextCursor).")]
+    [McpServerTool(Title = "Listar execuções", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista as execuções de workflows do n8n, com filtros opcionais por workflow e status. Resposta resumida por item (id, status, workflowId, mode, startedAt, stoppedAt e, se houve erro, errorNode/errorMessage); use include_data=true para trazer o payload completo de cada execução. Resposta paginada (verifique nextCursor).")]
     public async Task<string> list_executions(
         [Description("Filtra pelas execuções de um workflow específico (opcional, aceita ID ou URL)")] string? workflow_id = null,
         [Description("Filtra por status: error, success ou waiting (opcional)")] string? status = null,
@@ -564,7 +564,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Obtém os detalhes de uma execução de workflow do n8n. Resposta resumida por padrão (id, status, workflowId, mode, startedAt, stoppedAt e, se houve erro, errorNode/errorMessage); use include_data=true para trazer o payload completo.")]
+    [McpServerTool(Title = "Obter execução", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Obtém os detalhes de uma execução de workflow do n8n. Resposta resumida por padrão (id, status, workflowId, mode, startedAt, stoppedAt e, se houve erro, errorNode/errorMessage); use include_data=true para trazer o payload completo.")]
     public async Task<string> get_execution(
         [Description("ID da execução")] string execution_id,
         [Description("Se true, inclui os dados completos de execução na resposta (payload grande)")] bool include_data = false,
@@ -574,7 +574,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return SummarizeExecution(result, include_data).ToJsonString();
     }
 
-    [McpServerTool, Description("Exclui uma execução do histórico do n8n.")]
+    [McpServerTool(Title = "Excluir execução", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Exclui uma execução do histórico do n8n.")]
     public async Task<string> delete_execution(
         [Description("ID da execução")] string execution_id,
         CancellationToken ct = default)
@@ -585,7 +585,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
 
     // ---------- Tags ----------
 
-    [McpServerTool, Description("Lista as tags de workflow da instância n8n. Resposta paginada (verifique nextCursor).")]
+    [McpServerTool(Title = "Listar tags", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista as tags de workflow da instância n8n. Resposta paginada (verifique nextCursor).")]
     public async Task<string> list_tags(
         [Description("Quantidade máxima de itens (padrão 100, máximo 250)")] int limit = 100,
         [Description("Cursor de paginação retornado por uma chamada anterior (opcional)")] string? cursor = null,
@@ -595,7 +595,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Obtém uma tag do n8n pelo ID.")]
+    [McpServerTool(Title = "Obter tag", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Obtém uma tag do n8n pelo ID.")]
     public async Task<string> get_tag(
         [Description("ID da tag")] string tag_id,
         CancellationToken ct = default)
@@ -604,7 +604,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Cria uma nova tag no n8n.")]
+    [McpServerTool(Title = "Criar tag", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Cria uma nova tag no n8n.")]
     public async Task<string> create_tag(
         [Description("Nome da tag")] string name,
         CancellationToken ct = default)
@@ -613,7 +613,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Renomeia uma tag existente no n8n.")]
+    [McpServerTool(Title = "Renomear tag", ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false), Description("Renomeia uma tag existente no n8n.")]
     public async Task<string> update_tag(
         [Description("ID da tag")] string tag_id,
         [Description("Novo nome da tag")] string name,
@@ -623,7 +623,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Exclui uma tag do n8n.")]
+    [McpServerTool(Title = "Excluir tag", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Exclui uma tag do n8n.")]
     public async Task<string> delete_tag(
         [Description("ID da tag")] string tag_id,
         CancellationToken ct = default)
@@ -632,7 +632,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "{}";
     }
 
-    [McpServerTool, Description("Lista as tags atribuídas a um workflow do n8n.")]
+    [McpServerTool(Title = "Listar tags do workflow", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista as tags atribuídas a um workflow do n8n.")]
     public async Task<string> get_workflow_tags(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -642,7 +642,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "[]";
     }
 
-    [McpServerTool, Description("Define o conjunto de tags de um workflow do n8n, substituindo as tags atuais pelas informadas.")]
+    [McpServerTool(Title = "Definir tags do workflow", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Define o conjunto de tags de um workflow do n8n, substituindo as tags atuais pelas informadas.")]
     public async Task<string> set_workflow_tags(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("IDs das tags a atribuir, separados por vírgula")] string tag_ids,
@@ -654,7 +654,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return result?.ToJsonString() ?? "[]";
     }
 
-    [McpServerTool, Description("Define as tags de um workflow do n8n a partir dos nomes informados: resolve cada nome para o ID da tag existente (paginando list_tags) ou cria a tag automaticamente se não existir, e então substitui as tags do workflow pelas resolvidas. Evita ter que listar/criar tags manualmente antes de set_workflow_tags.")]
+    [McpServerTool(Title = "Definir tags do workflow por nome", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Define as tags de um workflow do n8n a partir dos nomes informados: resolve cada nome para o ID da tag existente (paginando list_tags) ou cria a tag automaticamente se não existir, e então substitui as tags do workflow pelas resolvidas. Evita ter que listar/criar tags manualmente antes de set_workflow_tags.")]
     public async Task<string> set_workflow_tags_by_name(
         [Description("ID ou URL do workflow")] string workflow_id,
         [Description("Nomes das tags a atribuir, separados por vírgula")] string tag_names,
@@ -706,7 +706,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
 
     // ---------- Backups ----------
 
-    [McpServerTool, Description("Faz um backup de um workflow do n8n. Deve ser chamado antes de qualquer ferramenta que altere ou exclua um workflow existente (update_workflow, delete_workflow, update_workflow_node, add_workflow_node, delete_workflow_node, rename_workflow_node). Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
+    [McpServerTool(Title = "Fazer backup do workflow", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Faz um backup de um workflow do n8n. Deve ser chamado antes de qualquer ferramenta que altere ou exclua um workflow existente (update_workflow, delete_workflow, update_workflow_node, add_workflow_node, delete_workflow_node, rename_workflow_node). Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
     public async Task<string> backup_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -716,7 +716,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return new JsonObject { ["workflowId"] = id, ["backupFile"] = backupFile, ["backupUrl"] = BuildBackupUrl(backupFile) }.ToJsonString();
     }
 
-    [McpServerTool, Description("Faz um backup de uma data table do n8n (colunas + todas as linhas). Deve ser chamado antes de qualquer ferramenta que altere ou exclua uma data table existente (delete_data_table, delete_data_table_column, update_data_table_rows, delete_data_table_rows). Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
+    [McpServerTool(Title = "Fazer backup da data table", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false), Description("Faz um backup de uma data table do n8n (colunas + todas as linhas). Deve ser chamado antes de qualquer ferramenta que altere ou exclua uma data table existente (delete_data_table, delete_data_table_column, update_data_table_rows, delete_data_table_rows). Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
     public async Task<string> backup_data_table(
         [Description("ID da data table")] string table_id,
         CancellationToken ct = default)
@@ -725,7 +725,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return new JsonObject { ["tableId"] = table_id, ["backupFile"] = backupFile, ["backupUrl"] = BuildBackupUrl(backupFile) }.ToJsonString();
     }
 
-    [McpServerTool, Description("Lista os arquivos de backup (workflows e data tables) salvos pelo servidor via backup_workflow/backup_data_table, com nome, data, tamanho e link de download (downloadUrl).")]
+    [McpServerTool(Title = "Listar backups", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista os arquivos de backup (workflows e data tables) salvos pelo servidor via backup_workflow/backup_data_table, com nome, data, tamanho e link de download (downloadUrl).")]
     public string list_backups(
         [Description("Filtra pelo nome do arquivo (opcional, substring, sem distinção de maiúsculas/minúsculas)")] string? filter = null)
     {
@@ -740,7 +740,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return array.ToJsonString();
     }
 
-    [McpServerTool, Description("Restaura um workflow do n8n a partir de um arquivo de backup (o nome do arquivo vem do campo backupFile retornado por backup_workflow — não é necessário baixar o arquivo). Se o workflow ainda existir, sobrescreve seu conteúdo; se tiver sido excluído, recria um novo workflow com o mesmo conteúdo (nesse caso o ID muda). Retorna um resumo compacto do workflow restaurado.")]
+    [McpServerTool(Title = "Restaurar backup de workflow", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false), Description("Restaura um workflow do n8n a partir de um arquivo de backup (o nome do arquivo vem do campo backupFile retornado por backup_workflow — não é necessário baixar o arquivo). Se o workflow ainda existir, sobrescreve seu conteúdo; se tiver sido excluído, recria um novo workflow com o mesmo conteúdo (nesse caso o ID muda). Retorna um resumo compacto do workflow restaurado.")]
     public async Task<string> restore_workflow_backup(
         [Description("Nome do arquivo de backup, ex: 20260710-153000-workflow-abc123.json")] string backup_file,
         CancellationToken ct = default)
@@ -772,7 +772,7 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return BuildWorkflowChangeSummary(created).ToJsonString();
     }
 
-    [McpServerTool, Description("Restaura uma data table do n8n a partir de um arquivo de backup (colunas + linhas), substituindo totalmente a tabela pelo estado do backup — inclusive se a tabela ainda existir, ela é excluída e recriada (o ID muda sempre). O nome do arquivo vem do campo backupFile retornado por backup_data_table — não é necessário baixar o arquivo.")]
+    [McpServerTool(Title = "Restaurar backup de data table", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false), Description("Restaura uma data table do n8n a partir de um arquivo de backup (colunas + linhas), substituindo totalmente a tabela pelo estado do backup — inclusive se a tabela ainda existir, ela é excluída e recriada (o ID muda sempre). O nome do arquivo vem do campo backupFile retornado por backup_data_table — não é necessário baixar o arquivo.")]
     public async Task<string> restore_data_table_backup(
         [Description("Nome do arquivo de backup, ex: 20260711-153000-datatable-Clientes-abc123.json")] string backup_file,
         CancellationToken ct = default)
