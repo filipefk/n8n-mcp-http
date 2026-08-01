@@ -189,4 +189,46 @@ public class BackupServiceTests : IDisposable
 
         Assert.Equal(Path.Combine(_tempDir, fileName), path);
     }
+
+    [Fact]
+    public async Task DeleteBackup_RemovesFileAndReturnsTrue_WhenFileExists()
+    {
+        var service = TestFactories.BuildBackupService(_tempDir);
+        var fileName = await service.SaveWorkflowBackupAsync("wf1", null, new JsonObject());
+
+        var result = service.DeleteBackup(fileName);
+
+        Assert.True(result);
+        Assert.False(File.Exists(Path.Combine(_tempDir, fileName)));
+    }
+
+    [Fact]
+    public void DeleteBackup_ReturnsFalse_WhenFileMissing()
+    {
+        var service = TestFactories.BuildBackupService(_tempDir);
+
+        Assert.False(service.DeleteBackup("nao-existe.json"));
+    }
+
+    [Fact]
+    public async Task DeleteBackup_StripsDirectoryTraversal()
+    {
+        var service = TestFactories.BuildBackupService(_tempDir);
+        var outsideDir = Path.Combine(_tempDir, "..", "mcptests-outside-" + Guid.NewGuid());
+        Directory.CreateDirectory(outsideDir);
+        var outsideFile = Path.Combine(outsideDir, "secret.json");
+        await File.WriteAllTextAsync(outsideFile, "{}");
+
+        try
+        {
+            var result = service.DeleteBackup($"../{Path.GetFileName(outsideDir)}/secret.json");
+
+            Assert.False(result);
+            Assert.True(File.Exists(outsideFile));
+        }
+        finally
+        {
+            Directory.Delete(outsideDir, recursive: true);
+        }
+    }
 }

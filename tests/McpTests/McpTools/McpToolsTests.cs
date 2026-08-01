@@ -393,6 +393,40 @@ public class McpToolsTests : IDisposable
         Assert.Equal($"https://mcp.test/backups/{backupFile}", item!["downloadUrl"]!.GetValue<string>());
     }
 
+    [Fact]
+    public async Task delete_backup_RemovesFile_AndItDisappearsFromListBackups()
+    {
+        var handler = new FakeHttpMessageHandler().Enqueue(HttpStatusCode.OK, new JsonObject { ["name"] = "WF" }.ToJsonString());
+        var tools = BuildTools(handler);
+        var backupResult = JsonNode.Parse(await tools.backup_workflow("wf1"))!.AsObject();
+        var backupFile = backupResult["backupFile"]!.GetValue<string>();
+
+        var deleteResult = JsonNode.Parse(tools.delete_backup(backupFile))!.AsObject();
+
+        Assert.Equal(1, deleteResult["deletedCount"]!.GetValue<int>());
+        Assert.Contains(deleteResult["deleted"]!.AsArray(), n => n!.GetValue<string>() == backupFile);
+        Assert.Empty(deleteResult["notFound"]!.AsArray());
+        Assert.Empty(JsonNode.Parse(tools.list_backups())!.AsArray());
+    }
+
+    [Fact]
+    public async Task delete_backup_ReportsMultipleFiles_SeparatingDeletedFromNotFound()
+    {
+        var handler = new FakeHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, new JsonObject { ["name"] = "WF1" }.ToJsonString())
+            .Enqueue(HttpStatusCode.OK, new JsonObject { ["name"] = "WF2" }.ToJsonString());
+        var tools = BuildTools(handler);
+        var file1 = JsonNode.Parse(await tools.backup_workflow("wf1"))!["backupFile"]!.GetValue<string>();
+        var file2 = JsonNode.Parse(await tools.backup_workflow("wf2"))!["backupFile"]!.GetValue<string>();
+
+        var deleteResult = JsonNode.Parse(tools.delete_backup($"{file1}, {file2}, nao-existe.json"))!.AsObject();
+
+        Assert.Equal(2, deleteResult["deletedCount"]!.GetValue<int>());
+        Assert.Equal(2, deleteResult["deleted"]!.AsArray().Count);
+        var notFound = Assert.Single(deleteResult["notFound"]!.AsArray());
+        Assert.Equal("nao-existe.json", notFound!.GetValue<string>());
+    }
+
     private static JsonObject BuildDataTableWithOneColumn() => new()
     {
         ["id"] = "t1",

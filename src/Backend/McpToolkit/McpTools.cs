@@ -740,6 +740,34 @@ public sealed class McpTools(McpClient n8n, BackupService backups, IHttpContextA
         return array.ToJsonString();
     }
 
+    [McpServerTool(Title = "Excluir backups", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false), Description("Exclui permanentemente um ou mais arquivos de backup salvos no servidor. A exclusão é definitiva e não afeta o n8n (apenas os arquivos de backup) — confirme com o usuário antes de chamar. Use list_backups para descobrir os nomes dos arquivos. Retorna os arquivos excluídos e os que não foram encontrados.")]
+    public string delete_backup(
+        [Description("Nome do arquivo de backup, ou vários separados por vírgula, ex: 20260711-153000-workflow-MeuFluxo-abc123.json")] string backup_files)
+    {
+        var names = backup_files.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (names.Count == 0)
+            throw new InvalidOperationException("Informe ao menos um nome de arquivo de backup.");
+
+        var deleted = new List<string>();
+        var notFound = new List<string>();
+        foreach (var name in names)
+        {
+            if (backups.DeleteBackup(name))
+                deleted.Add(name);
+            else
+                notFound.Add(name);
+        }
+
+        return new JsonObject
+        {
+            ["deletedCount"] = deleted.Count,
+            ["deleted"] = new JsonArray([.. deleted.Select(n => (JsonNode)n)]),
+            ["notFound"] = new JsonArray([.. notFound.Select(n => (JsonNode)n)])
+        }.ToJsonString();
+    }
+
     [McpServerTool(Title = "Restaurar backup de workflow", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false), Description("Restaura um workflow do n8n a partir de um arquivo de backup (o nome do arquivo vem do campo backupFile retornado por backup_workflow — não é necessário baixar o arquivo). Se o workflow ainda existir, sobrescreve seu conteúdo; se tiver sido excluído, recria um novo workflow com o mesmo conteúdo (nesse caso o ID muda). Retorna um resumo compacto do workflow restaurado.")]
     public async Task<string> restore_workflow_backup(
         [Description("Nome do arquivo de backup, ex: 20260710-153000-workflow-abc123.json")] string backup_file,

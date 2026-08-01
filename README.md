@@ -141,6 +141,7 @@ As ferramentas de escrita de workflow (`create_workflow`, `update_workflow`, `du
 | `list_backups` | Lista os arquivos de backup salvos pelo servidor (nome, data, tamanho, link de download) |
 | `restore_workflow_backup` | Restaura um workflow a partir de um arquivo de backup (sobrescreve se ainda existir, recria se foi excluído) |
 | `restore_data_table_backup` | Restaura uma data table a partir de um arquivo de backup — substituição total: exclui a tabela atual (se existir) e recria do zero com colunas e linhas do backup (o ID sempre muda) |
+| `delete_backup` | Exclui permanentemente um ou mais arquivos de backup do servidor (informados por nome, separados por vírgula) |
 
 O servidor não faz mais backup automaticamente antes de operações destrutivas (`update_workflow`, `delete_workflow`, as ferramentas de edição de node, `update_data_table_rows`, `delete_data_table_rows`, `delete_data_table_column`, `delete_data_table`) — as descrições dessas ferramentas apenas recomendam chamar `backup_workflow`/`backup_data_table` antes de alterar ou excluir algo existente. Quando chamadas, essas ferramentas salvam um snapshot em disco e devolvem o nome do arquivo (`backupFile`, usado para restaurar) e um link de download (`backupUrl`) — o conteúdo do backup nunca passa pela IA.
 

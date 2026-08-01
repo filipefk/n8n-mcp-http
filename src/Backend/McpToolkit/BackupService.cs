@@ -67,6 +67,16 @@ public sealed class BackupService
         return File.Exists(path) ? path : null;
     }
 
+    public bool DeleteBackup(string fileName)
+    {
+        var path = Path.Combine(_backupDir, Path.GetFileName(fileName));
+        if (!File.Exists(path))
+            return false;
+
+        File.Delete(path);
+        return true;
+    }
+
     private static string BuildSuffix(string kind, string id, string? name)
     {
         var idPart = SanitizeForFileName(id);
