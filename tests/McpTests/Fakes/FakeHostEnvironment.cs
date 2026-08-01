@@ -1,7 +1,9 @@
 using McpToolkit;
+using McpToolkit.Shell;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace McpTests.Fakes;
@@ -47,5 +49,17 @@ public static class TestFactories
         var env = new FakeHostEnvironment { ContentRootPath = backupDir };
         var options = Options.Create(new McpOptions { BackupDir = backupDir });
         return new McpToolkit.BackupService(env, options);
+    }
+
+    public static ShellCommandRunner BuildShellRunner(ShellOptions? shellOptions = null)
+    {
+        var options = Options.Create(shellOptions ?? new ShellOptions());
+        return new ShellCommandRunner(options);
+    }
+
+    public static ShellTools BuildShellTools(ShellOptions? shellOptions = null, ShellCommandRunner? runner = null)
+    {
+        var options = Options.Create(shellOptions ?? new ShellOptions());
+        return new ShellTools(options, NullLogger<ShellTools>.Instance, runner ?? new ShellCommandRunner(options));
     }
 }

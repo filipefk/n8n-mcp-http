@@ -39,12 +39,23 @@ O arquivo `src/Backend/N8nMcpHttp/appsettings.Development.json` contém opções
   "N8n": {
     "BackupDir": "",
     "PublicBaseUrl": ""
+  },
+  "Shell": {
+    "Enabled": false,
+    "DefaultShell": "Auto",
+    "WorkingDirectory": "",
+    "TimeoutSeconds": 60,
+    "MaxOutputChars": 30000,
+    "Password": "",
+    "AllowedCommands": [],
+    "BlockedCommands": []
   }
 }
 ```
 
 - `BackupDir` — onde os backups (ver seção "Backups" abaixo) são salvos. Se vazio (padrão), usa a pasta `backups/` na raiz do host.
 - `PublicBaseUrl` — base (`scheme://host`) usada para montar o link de download dos backups (`backupUrl`/`downloadUrl`). Útil atrás de um reverse proxy sem forwarded headers. Se vazio (padrão), é derivado da própria requisição MCP recebida.
+- `Shell:*` — configura as tools de execução de comandos do sistema operacional (ver seção "Tool de execução de comandos do sistema operacional" abaixo).
 
 Em ambiente de desenvolvimento o endpoint MCP fica disponível em `http://localhost:5462/mcp` ou `https://localhost:7268/mcp`.
 
@@ -148,6 +159,41 @@ O servidor não faz mais backup automaticamente antes de operações destrutivas
 #### Baixando um backup
 
 `backupUrl`/`downloadUrl` apontam para `GET /backups/{fileName}` no próprio servidor MCP. O endpoint é aberto (sem autenticação) — basta acessar a URL em qualquer navegador ou cliente HTTP. Retorna `404` se o arquivo não existir.
+
+### Shell
+
+| Tool | Descrição |
+|------|-----------|
+| `get_shell_info` | Retorna o SO detectado, o shell padrão, os shells disponíveis, o diretório de trabalho e os limites configurados. Sem senha |
+| `execute_shell_command` | Executa um comando no shell do sistema operacional onde o servidor MCP está rodando |
+
+**Desligadas por padrão** (`Shell:Enabled = false`) — com `false`, essas duas tools nem aparecem em `tools/list`. Ver seção "Tool de execução de comandos do sistema operacional" abaixo.
+
+## Tool de execução de comandos do sistema operacional
+
+Desligada por padrão (`Shell:Enabled = false`). Quando ligada, expõe dois tools MCP:
+
+- **`get_shell_info`** — sem senha, sem efeitos colaterais. Retorna o SO detectado, o shell padrão, os shells disponíveis, o diretório de trabalho e os limites configurados. Útil para o modelo decidir como chamar `execute_shell_command`.
+- **`execute_shell_command`** — executa um comando no shell do SO onde o servidor está rodando (**não** na máquina do usuário):
+  - **Windows** → PowerShell (`pwsh` se disponível no PATH, senão `powershell.exe`) ou `cmd.exe`.
+  - **Linux/macOS** → `bash` ou `sh`.
+  - Parâmetros: `command` (obrigatório), `shell` (`auto`/`powershell`/`cmd`/`bash`/`sh`), `working_directory`, `timeout_seconds`, `password`.
+  - Nunca lança exceção por causa de exit code diferente de zero — isso é um resultado legítimo, com `exitCode` e `stdErr` preenchidos no retorno.
+
+### Guard-rails configurados via `Shell`
+
+| Chave | Default | Efeito |
+|---|---|---|
+| `Enabled` | `false` | Se `false` (padrão), os dois tools nem são registrados no servidor MCP |
+| `DefaultShell` | `Auto` | Shell usado quando o chamador pede `shell = "auto"`; se `Auto`, cai no padrão do sistema operacional |
+| `WorkingDirectory` | `""` (diretório do processo) | Diretório padrão de execução |
+| `TimeoutSeconds` | `60` | Teto de timeout — o chamador pode pedir menos, nunca mais |
+| `MaxOutputChars` | `30000` | Trunca stdout/stderr; resultado marca `truncated: true` |
+| `Password` | `""` (sem senha) | Se preenchida, `execute_shell_command` passa a exigir o parâmetro `password` batendo com este valor. **`get_shell_info` nunca exige senha.** |
+| `AllowedCommands` | `[]` (sem restrição) | Se preenchida, só libera comandos cujo executável esteja na lista — checado em cada segmento do comando (separado por `;`, `&&`, `\|\|`, `\|`, `&`) |
+| `BlockedCommands` | `[]` (sem restrição) | Bloqueia comandos cujo executável esteja na lista, com a mesma checagem por segmento |
+
+**Importante:** mesmo com allowlist/blocklist e senha configuradas, isso é um guard-rail e **não uma sandbox** — quoting, subshells e comandos como `powershell -c "..."` ainda podem contornar a checagem. A imagem Docker deste servidor é publicada publicamente, então **avalie com cuidado antes de ligar `Shell:Enabled`** em qualquer instância exposta além de `localhost`, e configure pelo menos `Shell:Password`.
 
 ## Testando via Postman
 
@@ -255,6 +301,7 @@ src/Backend/McpToolkit/McpOptions.cs                       — POCO com Url, Api
 src/Backend/McpToolkit/McpClient.cs                        — wrapper sobre HttpClient para a API REST do n8n
 src/Backend/McpToolkit/McpTools.cs                         — tools MCP expostas via atributos [McpServerTool]
 src/Backend/McpToolkit/BackupService.cs                    — salva/lista/lê snapshots JSON em disco antes de operações destrutivas
+src/Backend/McpToolkit/Shell/                              — tools MCP de execução de comandos do SO (desligadas por padrão)
 tests/McpTests/                                            — projeto de testes xUnit para o McpToolkit
 ```
 
@@ -270,7 +317,7 @@ O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções
 dotnet test tests/McpTests/McpTests.csproj
 ```
 
-Os testes cobrem o `McpToolkit` (`McpClient`, `McpTools`, `BackupService`) sem depender de uma instância real do n8n nem de mocking frameworks: um `HttpMessageHandler` fake (`tests/McpTests/Fakes/FakeHttpMessageHandler.cs`) simula as respostas da API REST do n8n, e o `BackupService` é exercitado com um diretório temporário real.
+Os testes cobrem o `McpToolkit` (`McpClient`, `McpTools`, `BackupService`, `Shell/`) sem depender de uma instância real do n8n nem de mocking frameworks: um `HttpMessageHandler` fake (`tests/McpTests/Fakes/FakeHttpMessageHandler.cs`) simula as respostas da API REST do n8n, o `BackupService` é exercitado com um diretório temporário real, e os testes de `Shell/` executam comandos reais e triviais no shell do sistema operacional onde os testes rodam.
 
 ## Stack
 

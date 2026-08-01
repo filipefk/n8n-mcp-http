@@ -1,4 +1,5 @@
 using McpToolkit;
+using McpToolkit.Shell;
 using N8nMcpHttp.Middleware;
 using Serilog;
 using Serilog.Events;
@@ -17,15 +18,21 @@ builder.Host.UseSerilog((context, configuration) =>
             rollingInterval: RollingInterval.Day));
 
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection("N8n"));
+builder.Services.Configure<ShellOptions>(builder.Configuration.GetSection("Shell"));
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddHttpClient<McpClient>();
 builder.Services.AddSingleton<BackupService>();
+builder.Services.AddSingleton<ShellCommandRunner>();
 
-builder.Services
+var mcpBuilder = builder.Services
     .AddMcpServer()
     .WithHttpTransport()
     .WithTools<McpTools>();
+
+// Desligado por padrão: defina "Shell:Enabled": true para expor as tools de execução de comandos.
+if (builder.Configuration.GetValue("Shell:Enabled", false))
+    mcpBuilder.WithTools<ShellTools>();
 
 var app = builder.Build();
 

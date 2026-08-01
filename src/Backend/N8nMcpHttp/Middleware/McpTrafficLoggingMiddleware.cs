@@ -1,8 +1,15 @@
+using System.Text.RegularExpressions;
+
 namespace N8nMcpHttp.Middleware;
 
-public sealed class McpTrafficLoggingMiddleware(RequestDelegate next, ILogger<McpTrafficLoggingMiddleware> logger)
+public sealed partial class McpTrafficLoggingMiddleware(RequestDelegate next, ILogger<McpTrafficLoggingMiddleware> logger)
 {
     private static readonly string[] SensitiveHeaders = ["X-N8N-API-KEY"];
+
+    // Redige o parâmetro "password" da tool execute_shell_command para não gravar
+    // em texto claro no log o único segredo que protege a execução de comandos.
+    [GeneratedRegex("\"password\"\\s*:\\s*\"[^\"]*\"", RegexOptions.IgnoreCase)]
+    private static partial Regex PasswordFieldRegex();
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -14,6 +21,7 @@ public sealed class McpTrafficLoggingMiddleware(RequestDelegate next, ILogger<Mc
         using var requestReader = new StreamReader(context.Request.Body, leaveOpen: true);
         var requestBody = await requestReader.ReadToEndAsync();
         context.Request.Body.Position = 0;
+        requestBody = PasswordFieldRegex().Replace(requestBody, "\"password\":\"***\"");
 
         logger.LogInformation(
             "MCP request: {Method} {Path} | Headers: {Headers} | Body: {Body}",
