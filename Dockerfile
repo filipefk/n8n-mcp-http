@@ -23,3 +23,7 @@ ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "N8nMcpHttp.dll"]
+
+## docker build -t filipefk/n8n-mcp:1.2 -t filipefk/n8n-mcp:latest .
+## docker push filipefk/n8n-mcp:1.2
+## docker push filipefk/n8n-mcp:latest
