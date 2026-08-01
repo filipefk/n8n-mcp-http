@@ -1,6 +1,5 @@
 using McpToolkit;
 using McpToolkit.Shell;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,32 +15,29 @@ public sealed class FakeHostEnvironment : IHostEnvironment
     public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
 }
 
+public sealed class FakeRequestContext(string? headerUrl = null, string? headerApiKey = null, string? baseUrl = null) : IRequestContext
+{
+    public string? GetHeader(string name) => name switch
+    {
+        "X-N8N-URL" => headerUrl,
+        "X-N8N-API-KEY" => headerApiKey,
+        _ => null
+    };
+
+    public string? GetRequestBaseUrl() => baseUrl;
+}
+
 public static class TestFactories
 {
-    public static IHttpContextAccessor BuildHttpContextAccessor(string? url = null, string? apiKey = null)
-    {
-        var accessor = new HttpContextAccessor();
-        if (url is null && apiKey is null)
-        {
-            accessor.HttpContext = null;
-            return accessor;
-        }
-
-        var context = new DefaultHttpContext();
-        if (url is not null) context.Request.Headers["X-N8N-URL"] = url;
-        if (apiKey is not null) context.Request.Headers["X-N8N-API-KEY"] = apiKey;
-        accessor.HttpContext = context;
-        return accessor;
-    }
+    public static IRequestContext BuildRequestContext(string? headerUrl = null, string? headerApiKey = null, string? baseUrl = null) =>
+        new FakeRequestContext(headerUrl, headerApiKey, baseUrl);
 
     public static McpToolkit.McpClient BuildMcpClient(FakeHttpMessageHandler handler, string url = "https://n8n.test", string apiKey = "test-key", string? headerUrl = null, string? headerApiKey = null)
     {
         var httpClient = new HttpClient(handler);
         var options = Options.Create(new McpOptions { Url = url, ApiKey = apiKey });
-        var accessor = headerUrl is null && headerApiKey is null
-            ? BuildHttpContextAccessor()
-            : BuildHttpContextAccessor(headerUrl, headerApiKey);
-        return new McpToolkit.McpClient(httpClient, options, accessor);
+        var requestContext = new FakeRequestContext(headerUrl, headerApiKey);
+        return new McpToolkit.McpClient(httpClient, options, requestContext);
     }
 
     public static McpToolkit.BackupService BuildBackupService(string backupDir)

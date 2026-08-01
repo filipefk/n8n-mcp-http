@@ -42,11 +42,34 @@ public sealed partial class ShellCommandRunner(IOptions<ShellOptions> options)
 
         var stdOut = new StringBuilder();
         var stdErr = new StringBuilder();
+        var outTruncated = false;
+        var errTruncated = false;
+        var outLock = new object();
+        var errLock = new object();
+        // Teto de segurança contra saída ilimitada (ex: "yes" ou "find /") acumulando GB em memória
+        // durante o timeout inteiro — a truncagem final continua cortando no tamanho exato configurado.
+        var maxAccumulateChars = settings.MaxOutputChars > 0 ? settings.MaxOutputChars : int.MaxValue;
         var timedOut = false;
 
         using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdOut.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) stdErr.AppendLine(e.Data); };
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is null) return;
+            lock (outLock)
+            {
+                if (stdOut.Length < maxAccumulateChars) stdOut.AppendLine(e.Data);
+                else outTruncated = true;
+            }
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is null) return;
+            lock (errLock)
+            {
+                if (stdErr.Length < maxAccumulateChars) stdErr.AppendLine(e.Data);
+                else errTruncated = true;
+            }
+        };
 
         var stopwatch = Stopwatch.StartNew();
 
@@ -69,33 +92,44 @@ public sealed partial class ShellCommandRunner(IOptions<ShellOptions> options)
         {
             await process.WaitForExitAsync(timeoutCts.Token);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            timedOut = true;
+            // Sempre mata o processo, seja o timeout ou o cancelamento do chamador que disparou —
+            // a condição anterior só matava no caso de timeout, deixando o processo órfão quando
+            // era o cliente MCP que cancelava a chamada.
+            timedOut = !cancellationToken.IsCancellationRequested;
             TryKill(process);
+            if (cancellationToken.IsCancellationRequested)
+                throw;
         }
 
         stopwatch.Stop();
-        process.WaitForExit();
+        // Limitado no tempo: um neto de processo que herdou os handles dos pipes poderia manter
+        // o WaitForExit() sem parâmetro bloqueado para sempre.
+        process.WaitForExit(5000);
 
-        var (truncatedOut, outWasTruncated) = Truncate(stdOut.ToString(), settings.MaxOutputChars);
-        var (truncatedErr, errWasTruncated) = Truncate(stdErr.ToString(), settings.MaxOutputChars);
+        lock (outLock) lock (errLock)
+        {
+            var (truncatedOut, outWasTruncated) = Truncate(stdOut.ToString(), settings.MaxOutputChars);
+            var (truncatedErr, errWasTruncated) = Truncate(stdErr.ToString(), settings.MaxOutputChars);
 
-        return new ShellCommandResult(
-            ExitCode: timedOut ? -1 : process.ExitCode,
-            StdOut: truncatedOut,
-            StdErr: truncatedErr,
-            TimedOut: timedOut,
-            Truncated: outWasTruncated || errWasTruncated,
-            DurationMs: stopwatch.ElapsedMilliseconds,
-            Shell: effectiveShell.ToString(),
-            WorkingDirectory: workingDirectory);
+            return new ShellCommandResult(
+                ExitCode: timedOut ? -1 : process.ExitCode,
+                StdOut: truncatedOut,
+                StdErr: truncatedErr,
+                TimedOut: timedOut,
+                Truncated: outTruncated || errTruncated || outWasTruncated || errWasTruncated,
+                DurationMs: stopwatch.ElapsedMilliseconds,
+                Shell: effectiveShell.ToString(),
+                WorkingDirectory: workingDirectory);
+        }
     }
 
-    // Divide o comando em segmentos por ; && || | & para checar allow/blocklist em cada um.
-    // Isso reduz o acidente óbvio (ex: "echo ok && rm -rf x"), mas não é uma sandbox:
-    // quoting, subshells e comandos como "powershell -c ..." ainda contornam a checagem.
-    [GeneratedRegex(@"&&|\|\||[;&|]")]
+    // Divide o comando em segmentos por ; && || | & (e por quebra de linha — "echo ok\nwhoami" é
+    // um único segmento sem isso, e seu primeiro token "echo" passava ileso pelo allow/blocklist)
+    // para checar allow/blocklist em cada um. Isso reduz o acidente óbvio (ex: "echo ok && rm -rf x"),
+    // mas não é uma sandbox: quoting, subshells e comandos como "powershell -c ..." ainda contornam a checagem.
+    [GeneratedRegex(@"&&|\|\||[;&|\r\n]")]
     private static partial Regex CommandSeparatorRegex();
 
     private static void EnsureCommandAllowed(string command, ShellOptions settings)

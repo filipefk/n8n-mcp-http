@@ -1,21 +1,19 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using System.Text;
 using System.Text.Json.Nodes;
 
 namespace McpToolkit;
 
-public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHttpContextAccessor httpContextAccessor)
+public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IRequestContext requestContext)
 {
     private readonly McpOptions _opts = options.Value;
 
     private (string ApiBase, string ApiKey) ResolveTarget()
     {
-        var headers = httpContextAccessor.HttpContext?.Request.Headers;
-        var url = headers?["X-N8N-URL"].FirstOrDefault();
+        var url = requestContext.GetHeader("X-N8N-URL");
         if (string.IsNullOrWhiteSpace(url)) url = _opts.Url;
 
-        var apiKey = headers?["X-N8N-API-KEY"].FirstOrDefault();
+        var apiKey = requestContext.GetHeader("X-N8N-API-KEY");
         if (string.IsNullOrWhiteSpace(apiKey)) apiKey = _opts.ApiKey;
 
         if (string.IsNullOrWhiteSpace(url))
@@ -37,7 +35,7 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         using var response = await http.SendAsync(request, ct);
         var content = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"n8n API {(int)response.StatusCode}: {content}");
+            throw new N8nApiException(response.StatusCode, content);
 
         return string.IsNullOrWhiteSpace(content) ? null : JsonNode.Parse(content);
     }
@@ -84,6 +82,20 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         };
     }
 
+    // A API de update do n8n só aceita name/nodes/connections/settings — staticData e pinData
+    // não podem ser reenviados e são perdidos por esta operação. Não há como evitar isso client-side;
+    // o melhor que dá pra fazer é avisar quando o workflow tinha esses campos antes da edição.
+    private static void AttachDataLossWarningIfNeeded(JsonObject current, JsonNode? result)
+    {
+        var lost = new List<string>();
+        if (current["staticData"] is JsonObject { Count: > 0 }) lost.Add("staticData");
+        if (current["pinData"] is JsonObject { Count: > 0 }) lost.Add("pinData");
+
+        if (lost.Count > 0 && result is JsonObject resultObj)
+            resultObj["_dataLossWarning"] =
+                $"O workflow tinha {string.Join(" e ", lost)} antes desta edição. A API do n8n não aceita esses campos no payload de atualização (apenas name/nodes/connections/settings), então podem ter sido perdidos.";
+    }
+
     // ---------- Workflows ----------
 
     public Task<JsonNode?> ListWorkflowsAsync(string? name, bool? active, int limit, string? cursor, bool excludePinnedData = true, CancellationToken ct = default)
@@ -116,7 +128,9 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         if (connections is not null) current["connections"] = connections;
         if (settings is not null) current["settings"] = settings;
 
-        return await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        var result = await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        AttachDataLossWarningIfNeeded(current, result);
+        return result;
     }
 
     public async Task<JsonNode?> DuplicateWorkflowAsync(string workflowId, string? newName, CancellationToken ct = default)
@@ -138,6 +152,9 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
     public Task<JsonNode?> DeactivateWorkflowAsync(string workflowId, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"workflows/{workflowId}/deactivate", ct: ct);
 
+    public Task<JsonNode?> SetWorkflowActiveAsync(string workflowId, bool active, CancellationToken ct = default) =>
+        active ? ActivateWorkflowAsync(workflowId, ct) : DeactivateWorkflowAsync(workflowId, ct);
+
     // ---------- Edição granular de nodes ----------
 
     private static void DeepMergePatch(JsonObject target, JsonObject patch)
@@ -151,7 +168,10 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         }
     }
 
-    private static void AddConnection(JsonObject connections, string fromNode, string toNode)
+    // Escreve na saída "main" de índice fromOutputIndex (índice de entrada toInputIndex no destino).
+    // Preservar o índice de saída importa quando fromNode é um IF/Switch: religar sempre em main[0]
+    // fundiria os ramos "true"/"false" (ou os cases de um Switch) em um só.
+    private static void AddConnection(JsonObject connections, string fromNode, int fromOutputIndex, string toNode, int toInputIndex = 0)
     {
         if (connections[fromNode] is not JsonObject fromEntry)
         {
@@ -165,57 +185,71 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
             fromEntry["main"] = outputs;
         }
 
-        if (outputs.Count == 0)
+        while (outputs.Count <= fromOutputIndex)
             outputs.Add(new JsonArray());
-        if (outputs[0] is not JsonArray firstOutput)
+        if (outputs[fromOutputIndex] is not JsonArray branch)
         {
-            firstOutput = new JsonArray();
-            outputs[0] = firstOutput;
+            branch = new JsonArray();
+            outputs[fromOutputIndex] = branch;
         }
 
-        firstOutput.Add(new JsonObject { ["node"] = toNode, ["type"] = "main", ["index"] = 0 });
+        branch.Add(new JsonObject { ["node"] = toNode, ["type"] = "main", ["index"] = toInputIndex });
     }
 
-    private static List<string> FindUpstreamNodes(JsonObject connections, string nodeName)
+    private static void AddConnection(JsonObject connections, string fromNode, string toNode) =>
+        AddConnection(connections, fromNode, 0, toNode, 0);
+
+    // Retorna, para cada conexão que aponta para nodeName, o node de origem e o índice
+    // da saída "main" pela qual ele alimentava nodeName (necessário para religar preservando o ramo).
+    private static List<(string Node, int OutputIndex)> FindUpstreamConnections(JsonObject connections, string nodeName)
     {
-        var result = new List<string>();
+        var result = new List<(string, int)>();
         foreach (var (source, entry) in connections)
         {
             if (entry is not JsonObject entryObj || entryObj["main"] is not JsonArray outputs) continue;
-            if (outputs.OfType<JsonArray>().Any(targets => targets.Any(t => t?["node"]?.GetValue<string>() == nodeName)))
-                result.Add(source);
+            for (var idx = 0; idx < outputs.Count; idx++)
+                if (outputs[idx] is JsonArray targets && targets.Any(t => t?["node"]?.GetValue<string>() == nodeName))
+                    result.Add((source, idx));
         }
         return result;
     }
 
-    private static List<string> FindDownstreamNodes(JsonObject connections, string nodeName)
+    // Retorna os destinos das saídas "main" do próprio nodeName, com o índice de entrada original de cada um.
+    private static List<(string Node, int InputIndex)> FindDownstreamConnections(JsonObject connections, string nodeName)
     {
-        var result = new List<string>();
+        var result = new List<(string, int)>();
         if (connections[nodeName] is not JsonObject entry || entry["main"] is not JsonArray outputs)
             return result;
 
         foreach (var targets in outputs.OfType<JsonArray>())
-            foreach (var target in targets)
-                if (target?["node"]?.GetValue<string>() is string name)
-                    result.Add(name);
+            foreach (var target in targets.OfType<JsonObject>())
+                if (target["node"]?.GetValue<string>() is string name)
+                    result.Add((name, target["index"]?.GetValue<int>() ?? 0));
 
         return result;
     }
 
+    // Remove toda referência a nodeName em qualquer tipo de conexão (main, ai_languageModel, ai_tool, ai_memory, ...),
+    // não só "main" — um node ligado só por uma conexão de IA (comum em nodes LangChain) não tem "main" nenhum,
+    // e a versão anterior descartava a entrada inteira nesse caso, apagando também as demais conexões de IA do source.
     private static void RemoveConnectionsTo(JsonObject connections, string nodeName)
     {
         foreach (var (_, entry) in connections)
         {
-            if (entry is not JsonObject entryObj || entryObj["main"] is not JsonArray outputs) continue;
-            foreach (var targets in outputs.OfType<JsonArray>())
-                for (var i = targets.Count - 1; i >= 0; i--)
-                    if (targets[i]?["node"]?.GetValue<string>() == nodeName)
-                        targets.RemoveAt(i);
+            if (entry is not JsonObject entryObj) continue;
+            foreach (var (_, typeValue) in entryObj)
+            {
+                if (typeValue is not JsonArray outputs) continue;
+                foreach (var targets in outputs.OfType<JsonArray>())
+                    for (var i = targets.Count - 1; i >= 0; i--)
+                        if (targets[i]?["node"]?.GetValue<string>() == nodeName)
+                            targets.RemoveAt(i);
+            }
         }
 
         var emptyKeys = connections
             .Where(kv => kv.Value is JsonObject entryObj
-                && (entryObj["main"] is not JsonArray outputs || outputs.OfType<JsonArray>().All(a => a.Count == 0)))
+                && entryObj.All(p => p.Value is not JsonArray outputs || outputs.OfType<JsonArray>().All(a => a.Count == 0)))
             .Select(kv => kv.Key)
             .ToList();
 
@@ -266,7 +300,9 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
 
         DeepMergePatch(node, patch);
 
-        return await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        var result = await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        AttachDataLossWarningIfNeeded(current, result);
+        return result;
     }
 
     public async Task<JsonNode?> AddWorkflowNodeAsync(string workflowId, JsonObject node, string? connectFrom, string? connectTo, CancellationToken ct = default)
@@ -303,7 +339,9 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         if (!string.IsNullOrWhiteSpace(connectFrom)) AddConnection(connections, connectFrom, nodeName);
         if (!string.IsNullOrWhiteSpace(connectTo)) AddConnection(connections, nodeName, connectTo);
 
-        return await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        var result = await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        AttachDataLossWarningIfNeeded(current, result);
+        return result;
     }
 
     public async Task<JsonNode?> DeleteWorkflowNodeAsync(string workflowId, string nodeName, bool reconnect, CancellationToken ct = default)
@@ -322,19 +360,24 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
             current["connections"] = connections;
         }
 
-        var upstream = FindUpstreamNodes(connections, nodeName);
-        var downstream = FindDownstreamNodes(connections, nodeName);
+        var upstream = FindUpstreamConnections(connections, nodeName);
+        var downstream = FindDownstreamConnections(connections, nodeName);
 
         nodes.Remove(node);
         connections.Remove(nodeName);
         RemoveConnectionsTo(connections, nodeName);
 
         if (reconnect)
-            foreach (var up in upstream)
-                foreach (var down in downstream)
-                    AddConnection(connections, up, down);
+            // Cada upstream religa, no seu próprio índice de saída original (preservando ramos de
+            // IF/Switch a montante), para todos os destinos a jusante de nodeName, preservando o
+            // índice de entrada original de cada destino.
+            foreach (var (upNode, upOutputIndex) in upstream)
+                foreach (var (downNode, downInputIndex) in downstream)
+                    AddConnection(connections, upNode, upOutputIndex, downNode, downInputIndex);
 
-        return await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        var result = await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        AttachDataLossWarningIfNeeded(current, result);
+        return result;
     }
 
     public async Task<JsonNode?> RenameWorkflowNodeAsync(string workflowId, string oldName, string newName, CancellationToken ct = default)
@@ -369,7 +412,9 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IHt
         foreach (var n in nodeList)
             ReplaceExpressionReferences(n, oldRef, newRef);
 
-        return await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        var result = await SendAsync(HttpMethod.Put, $"workflows/{workflowId}", FilterWorkflowPayload(current), ct);
+        AttachDataLossWarningIfNeeded(current, result);
+        return result;
     }
 
     // ---------- Data Tables ----------

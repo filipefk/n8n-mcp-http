@@ -44,7 +44,7 @@ public class BackupServiceTests : IDisposable
         var path = Path.Combine(_tempDir, fileName);
 
         Assert.True(File.Exists(path));
-        Assert.Matches(@"\d{8}-\d{6}-workflow-Meu_WF-wf1\.json$", fileName);
+        Assert.Matches(@"\d{8}-\d{9}-workflow-Meu_WF-wf1-[0-9a-f]{6}\.json$", fileName);
         var content = await File.ReadAllTextAsync(path);
         Assert.Equal(workflow.ToJsonString(), JsonNode.Parse(content)!.ToJsonString());
     }
@@ -56,7 +56,7 @@ public class BackupServiceTests : IDisposable
 
         var fileName = await service.SaveWorkflowBackupAsync("wf1", null, new JsonObject());
 
-        Assert.Matches(@"\d{8}-\d{6}-workflow-wf1\.json$", fileName);
+        Assert.Matches(@"\d{8}-\d{9}-workflow-wf1-[0-9a-f]{6}\.json$", fileName);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class BackupServiceTests : IDisposable
 
         var fileName = await service.SaveWorkflowBackupAsync("wf/with:invalid*chars", null, new JsonObject());
 
-        Assert.Contains("workflow-wf_with_invalid_chars.json", fileName);
+        Assert.Contains("workflow-wf_with_invalid_chars-", fileName);
     }
 
     [Fact]

@@ -17,6 +17,19 @@ public sealed partial class McpTrafficLoggingMiddleware(RequestDelegate next, IL
             .Where(h => !string.Equals(h.Key, "Cookie", StringComparison.OrdinalIgnoreCase))
             .Select(h => $"{h.Key}={(SensitiveHeaders.Contains(h.Key, StringComparer.OrdinalIgnoreCase) ? "***" : h.Value.ToString())}"));
 
+        // O GET /mcp abre o canal SSE do transporte MCP e fica aberto por toda a sessão — bufferizar
+        // a resposta em MemoryStream (como abaixo) faria o canal nunca ser entregue de forma incremental
+        // e acumularia indefinidamente em memória. Só corpos de requisição/resposta de tamanho finito
+        // (POST, o canal de mensagens JSON-RPC) são bufferizados e logados por inteiro.
+        if (HttpMethods.IsGet(context.Request.Method))
+        {
+            logger.LogInformation(
+                "MCP request: {Method} {Path} | Headers: {Headers} | Body: (canal SSE, não bufferizado)",
+                context.Request.Method, context.Request.Path, headers);
+            await next(context);
+            return;
+        }
+
         context.Request.EnableBuffering();
         using var requestReader = new StreamReader(context.Request.Body, leaveOpen: true);
         var requestBody = await requestReader.ReadToEndAsync();

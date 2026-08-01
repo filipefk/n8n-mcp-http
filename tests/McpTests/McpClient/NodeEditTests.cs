@@ -42,6 +42,51 @@ public class NodeEditTests
     }
 
     [Fact]
+    public async Task UpdateWorkflowNodeAsync_AttachesDataLossWarning_WhenWorkflowHadStaticDataOrPinData()
+    {
+        // A API de update do n8n só aceita name/nodes/connections/settings — staticData e pinData
+        // são descartados nesse PUT. Como não há como evitar isso client-side, o mínimo é avisar.
+        var workflow = new JsonObject
+        {
+            ["name"] = "WF",
+            ["nodes"] = new JsonArray { new JsonObject { ["name"] = "Node1", ["parameters"] = new JsonObject() } },
+            ["connections"] = new JsonObject(),
+            ["staticData"] = new JsonObject { ["lastPoll"] = "2026-01-01" },
+            ["pinData"] = new JsonObject { ["Node1"] = new JsonArray() }
+        };
+        var handler = new FakeHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, workflow.ToJsonString())
+            .Enqueue(HttpStatusCode.OK, "{}");
+        var client = BuildClient(handler);
+
+        var result = await client.UpdateWorkflowNodeAsync("wf1", "Node1", new JsonObject { ["disabled"] = true }) as JsonObject;
+
+        Assert.NotNull(result);
+        Assert.Contains("staticData", result!["_dataLossWarning"]!.GetValue<string>());
+        Assert.Contains("pinData", result["_dataLossWarning"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task UpdateWorkflowNodeAsync_NoDataLossWarning_WhenNoStaticDataOrPinData()
+    {
+        var workflow = new JsonObject
+        {
+            ["name"] = "WF",
+            ["nodes"] = new JsonArray { new JsonObject { ["name"] = "Node1", ["parameters"] = new JsonObject() } },
+            ["connections"] = new JsonObject()
+        };
+        var handler = new FakeHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, workflow.ToJsonString())
+            .Enqueue(HttpStatusCode.OK, "{}");
+        var client = BuildClient(handler);
+
+        var result = await client.UpdateWorkflowNodeAsync("wf1", "Node1", new JsonObject { ["disabled"] = true }) as JsonObject;
+
+        Assert.NotNull(result);
+        Assert.False(result!.ContainsKey("_dataLossWarning"));
+    }
+
+    [Fact]
     public async Task UpdateWorkflowNodeAsync_Throws_WhenNodeNotFound()
     {
         var workflow = new JsonObject { ["name"] = "WF", ["nodes"] = new JsonArray(), ["connections"] = new JsonObject() };
@@ -169,6 +214,87 @@ public class NodeEditTests
 
         var connections = PutPayload(handler)["connections"]!.AsObject();
         Assert.False(connections.ContainsKey("A"));
+    }
+
+    [Fact]
+    public async Task DeleteWorkflowNodeAsync_ReconnectPreservesOutputBranch_WhenUpstreamIsIf()
+    {
+        // If --true(0)--> C ; If --false(1)--> B --> D. B é alimentado pelo ramo "false" (índice 1).
+        // Bug antigo: AddConnection sempre gravava em main[0], então religar B->D jogaria D dentro
+        // do ramo "true" (misturando com C) e deixaria o ramo "false" vazio, fundindo os dois ramos.
+        var workflow = new JsonObject
+        {
+            ["name"] = "WF",
+            ["nodes"] = new JsonArray
+            {
+                new JsonObject { ["name"] = "If" },
+                new JsonObject { ["name"] = "B" },
+                new JsonObject { ["name"] = "C" },
+                new JsonObject { ["name"] = "D" }
+            },
+            ["connections"] = new JsonObject
+            {
+                ["If"] = new JsonObject
+                {
+                    ["main"] = new JsonArray
+                    {
+                        new JsonArray { new JsonObject { ["node"] = "C", ["type"] = "main", ["index"] = 0 } },
+                        new JsonArray { new JsonObject { ["node"] = "B", ["type"] = "main", ["index"] = 0 } }
+                    }
+                },
+                ["B"] = new JsonObject { ["main"] = new JsonArray { new JsonArray { new JsonObject { ["node"] = "D", ["type"] = "main", ["index"] = 0 } } } }
+            }
+        };
+        var handler = new FakeHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, workflow.ToJsonString())
+            .Enqueue(HttpStatusCode.OK, "{}");
+        var client = BuildClient(handler);
+
+        await client.DeleteWorkflowNodeAsync("wf1", "B", reconnect: true);
+
+        var connections = PutPayload(handler)["connections"]!.AsObject();
+        var ifOutputs = connections["If"]!["main"]!.AsArray();
+        var trueBranch = ifOutputs[0]!.AsArray();
+        var falseBranch = ifOutputs[1]!.AsArray();
+        Assert.Single(trueBranch);
+        Assert.Equal("C", trueBranch[0]!["node"]!.GetValue<string>());
+        Assert.Single(falseBranch);
+        Assert.Equal("D", falseBranch[0]!["node"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task DeleteWorkflowNodeAsync_DoesNotRemoveUnrelatedAiConnections()
+    {
+        // Model (um node LangChain ligado só via ai_languageModel, sem "main") não deve ser afetado
+        // ao excluir um node totalmente não relacionado (bug antigo: qualquer entry sem "main" era
+        // descartada por inteiro no cleanup de conexões vazias).
+        var workflow = new JsonObject
+        {
+            ["name"] = "WF",
+            ["nodes"] = new JsonArray
+            {
+                new JsonObject { ["name"] = "Model" },
+                new JsonObject { ["name"] = "Agent" },
+                new JsonObject { ["name"] = "Unrelated" }
+            },
+            ["connections"] = new JsonObject
+            {
+                ["Model"] = new JsonObject
+                {
+                    ["ai_languageModel"] = new JsonArray { new JsonArray { new JsonObject { ["node"] = "Agent", ["type"] = "ai_languageModel", ["index"] = 0 } } }
+                }
+            }
+        };
+        var handler = new FakeHttpMessageHandler()
+            .Enqueue(HttpStatusCode.OK, workflow.ToJsonString())
+            .Enqueue(HttpStatusCode.OK, "{}");
+        var client = BuildClient(handler);
+
+        await client.DeleteWorkflowNodeAsync("wf1", "Unrelated", reconnect: true);
+
+        var connections = PutPayload(handler)["connections"]!.AsObject();
+        Assert.True(connections.ContainsKey("Model"));
+        Assert.Equal("Agent", connections["Model"]!["ai_languageModel"]![0]![0]!["node"]!.GetValue<string>());
     }
 
     [Fact]

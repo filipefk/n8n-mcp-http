@@ -7,11 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <!-- Antes dependia do FrameworkReference Microsoft.AspNetCore.App inteiro só para o
+         IHttpContextAccessor usado em ResolveTarget/BuildBackupUrl. Com IRequestContext (implementado
+         no host), a biblioteca só precisa mesmo de Options/Hosting.Abstractions — nada de ASP.NET Core. -->
     <PackageReference Include="ModelContextProtocol.Core" Version="1.4.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.7" />
   </ItemGroup>
 
 </Project>

@@ -33,7 +33,10 @@ public sealed class BackupService
 
     private async Task<string> SaveAsync(string suffix, JsonNode? content, CancellationToken ct)
     {
-        var fileName = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{suffix}.json";
+        // Precisão de segundo colidia em silêncio quando dois backups do mesmo item eram feitos
+        // no mesmo segundo (o segundo sobrescrevia o primeiro). Milissegundos reduzem a janela;
+        // o sufixo aleatório garante unicidade mesmo se dois backups caírem no mesmo milissegundo.
+        var fileName = $"{DateTime.UtcNow:yyyyMMdd-HHmmssfff}-{suffix}-{Guid.NewGuid().ToString("N")[..6]}.json";
         var path = Path.Combine(_backupDir, fileName);
         await File.WriteAllTextAsync(path, content?.ToJsonString() ?? "{}", ct);
         return fileName;

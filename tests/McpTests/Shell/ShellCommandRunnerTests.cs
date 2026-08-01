@@ -149,6 +149,19 @@ public class ShellCommandRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_Throws_WhenBlockedCommandAppearsAfterNewline()
+    {
+        const string blockedName = "whoami";
+        var chained = $"echo ok\n{blockedName}";
+        var runner = TestFactories.BuildShellRunner(new ShellOptions { BlockedCommands = [blockedName] });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            runner.RunAsync(chained, ShellKind.Auto, null, null));
+
+        Assert.Contains(blockedName, ex.Message);
+    }
+
+    [Fact]
     public async Task RunAsync_Throws_WhenCommandNotInAllowList()
     {
         var runner = TestFactories.BuildShellRunner(new ShellOptions { AllowedCommands = ["git"] });

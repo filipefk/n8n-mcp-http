@@ -10,12 +10,14 @@ public class WorkflowTests
         TestFactories.BuildMcpClient(handler);
 
     [Fact]
-    public async Task SendAsync_ThrowsInvalidOperationException_OnNonSuccessStatusCode()
+    public async Task SendAsync_ThrowsN8nApiException_OnNonSuccessStatusCode()
     {
         var handler = new FakeHttpMessageHandler().Enqueue(HttpStatusCode.NotFound, "not found body");
         var client = BuildClient(handler);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetWorkflowAsync("wf1"));
+        var ex = await Assert.ThrowsAsync<McpToolkit.N8nApiException>(() => client.GetWorkflowAsync("wf1"));
+        Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
+        Assert.Equal("not found body", ex.Body);
         Assert.Equal("n8n API 404: not found body", ex.Message);
     }
 
