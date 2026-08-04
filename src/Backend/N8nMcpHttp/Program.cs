@@ -25,7 +25,16 @@ builder.Services.Configure<ShellOptions>(builder.Configuration.GetSection("Shell
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IRequestContext, HttpRequestContext>();
 
-builder.Services.AddHttpClient<McpClient>();
+// N8n:IgnoreSslErrors permite ignorar erros de validação do certificado TLS da instância n8n
+// (ex: certificado autoassinado ou cadeia inválida) — desligado por padrão.
+var ignoreSslErrors = builder.Configuration.GetValue("N8n:IgnoreSslErrors", false);
+builder.Services.AddHttpClient<McpClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = ignoreSslErrors
+            ? (_, _, _, _) => true
+            : null
+    });
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddSingleton<ShellCommandRunner>();
 
