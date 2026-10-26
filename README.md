@@ -17,28 +17,117 @@ Servidor MCP (Model Context Protocol) para integração com o n8n, exposto via H
 2. Selecione o menu Settings, a esquerda em baixo, e escolha a opção **n8n API**
 2. Clique em **"Create an API Key"**
 3. Dê um nome, escolha a expiração e selecione as permissões que esta API Key terá (podem ser editadas depois) e clique em Save
-4. Copie o valor gerado — será usado como `X-N8N-API-KEY`
+4. Copie o valor gerado — é o 3º valor da key do header `x-api-key` (ver "Autenticação" abaixo)
 
-## Configuração
+## Autenticação (header `x-api-key`)
 
-### Credenciais por requisição (recomendado)
-
-Passe a URL e a API key da instância n8n como headers HTTP em cada requisição. Isso permite que diferentes clientes apontem para instâncias n8n diferentes sem nenhuma configuração no servidor:
+O servidor exige **um único header** em `/mcp`, `/api-key` e `/backups`:
 
 ```
-X-N8N-URL: <url-da-sua-instancia-n8n>
-X-N8N-API-KEY: <sua-api-key>
+x-api-key: <key>
 ```
 
-### Configuração do servidor (opcional)
+O valor é uma *key composta* que junta numa só string Base64Url três valores, nesta ordem:
+
+| Posição | Valor | Obrigatório |
+|---|---|---|
+| 1 | **Chave MCP** — uma das chaves cadastradas em `McpAuth:ApiKeys`; é o que autoriza o uso deste servidor | sim |
+| 2 | **URL da instância n8n** | não |
+| 3 | **API Key do n8n** | não |
+
+Com as posições 2 e 3 preenchidas, uma única instância deste servidor atende instâncias n8n diferentes a cada requisição, sem nenhuma configuração — era o papel dos headers `X-N8N-URL`/`X-N8N-API-KEY`, que **não são mais lidos**. Vazias, caem na configuração do servidor (ver "Destino n8n" abaixo).
+
+A validação é *fail-closed*: sem o header, com uma key que não decodifica, com uma chave MCP fora de `McpAuth:ApiKeys` ou com `McpAuth:ApiKeys` vazia, a resposta é `401`. A comparação é em tempo fixo (`CryptographicOperations.FixedTimeEquals`) contra todas as chaves cadastradas, sem sair na primeira coincidência.
+
+> **Aviso:** a key é **ofuscação, não criptografia** — não há segredo no algoritmo, e quem a tiver consegue recuperar a API Key do n8n gravada dentro dela. Trate-a como uma senha. Cada geração produz uma string diferente (semente aleatória) e todas são válidas.
+
+### Cadastrando as chaves MCP
+
+Em `appsettings.json` (ou user secrets, ou variáveis de ambiente):
+
+```json
+{
+  "McpAuth": {
+    "ApiKeys": [ "chave-de-um-usuario", "chave-de-outro" ]
+  }
+}
+```
+
+Por variável de ambiente, uma por índice: `McpAuth__ApiKeys__0`, `McpAuth__ApiKeys__1`, …
+
+Use valores aleatórios longos, não senhas digitáveis — por exemplo 32 bytes em Base64:
+
+```bash
+openssl rand -base64 32
+```
+
+Subir o servidor sem nenhuma chave cadastrada é permitido, mas registra um aviso no boot e rejeita tudo com `401`.
+
+### Gerando a key pela página web
+
+Acesse a raiz do servidor no navegador (`http://localhost:5462/`). A página é pública e tem duas abas: **Gerar key** (monta a key a partir da chave MCP, da URL e da API Key do n8n, e já mostra o comando `claude mcp add` pronto) e **Decodificar key** (desfaz uma key existente para conferir o que há dentro dela). As duas chamam os endpoints abaixo, que continuam protegidos — a página pede a chave MCP no passo 1 justamente para enviá-la no header.
+
+### Gerando a key pelos endpoints HTTP
+
+Nos endpoints `/api-key`, o `x-api-key` é a **chave MCP em texto puro** (não a key composta): é o que esses endpoints produzem e desfazem.
+
+```bash
+curl -X POST http://localhost:5462/api-key/generate \
+  -H "x-api-key: <sua-chave-mcp>" \
+  -H "Content-Type: application/json" \
+  -d '{"mcpApiKey":"<sua-chave-mcp>","n8nUrl":"https://n8n.minha-empresa.com","n8nApiKey":"<api-key-do-n8n>"}'
+```
+
+```bash
+curl -X POST http://localhost:5462/api-key/decode \
+  -H "x-api-key: <sua-chave-mcp>" \
+  -H "Content-Type: application/json" \
+  -d '{"apiKey":"<key-gerada>"}'
+```
+
+`generate` devolve `{ "apiKey": "..." }` e exige `mcpApiKey` (`400` sem ele); `decode` devolve `{ "mcpApiKey", "n8nUrl", "n8nApiKey" }` e responde `400` se a key não for válida. São `POST` de propósito: os segredos vão no corpo, nunca na URL — e `/api-key` fica fora do log de tráfego, para a API Key do n8n do corpo não chegar ao arquivo de log.
+
+### Destino n8n (URL e API Key)
+
+A URL e a API key da instância n8n são resolvidas **a cada requisição**, nesta ordem:
+
+| Prioridade | Origem |
+|---|---|
+| 1 | 2º e 3º valores do header `x-api-key` |
+| 2 | `N8n:Url` / `N8n:ApiKey` (appsettings, user secrets, `N8n__Url` / `N8n__ApiKey`) |
+| 3 | variáveis de ambiente `N8N_URL` / `N8N_API_KEY` |
+
+As duas são resolvidas de forma independente (a URL pode vir da key e a credencial da configuração). Faltando qualquer uma nas três origens, a tool falha com uma mensagem dizendo exatamente onde informá-la.
+
+### Limite de requisições
+
+Há um limite por IP, em janela fixa de um minuto, para que a chave MCP não fique exposta a força bruta: `RateLimit:ApiKeyPermitsPerMinute` (padrão `10`) em `/api-key` e `RateLimit:McpPermitsPerMinute` (padrão `300`) em `/mcp` e `/backups`. Ao estourar, a resposta é `429`.
+
+> Atrás de um reverse proxy sem forwarded headers, o IP visto é o do proxy e todas as requisições compartilham a mesma cota.
+
+### Health check
+
+`GET /health` responde `200` com `{ "status": "ok" }`. É aberto, sem API Key — serve de liveness probe para container/orquestrador.
+
+## Configuração do servidor (opcional)
 
 O arquivo `src/Backend/N8nMcpHttp/appsettings.Development.json` contém opções do servidor:
 
 ```json
 {
+  "McpAuth": {
+    "ApiKeys": []
+  },
+  "RateLimit": {
+    "McpPermitsPerMinute": 300,
+    "ApiKeyPermitsPerMinute": 10
+  },
   "N8n": {
+    "Url": "",
+    "ApiKey": "",
     "BackupDir": "",
-    "PublicBaseUrl": ""
+    "PublicBaseUrl": "",
+    "IgnoreSslErrors": false
   },
   "Shell": {
     "Enabled": false,
@@ -53,8 +142,12 @@ O arquivo `src/Backend/N8nMcpHttp/appsettings.Development.json` contém opções
 }
 ```
 
+- `McpAuth:ApiKeys` — chaves MCP autorizadas (ver "Autenticação" acima). Lista vazia rejeita tudo.
+- `RateLimit:*` — cota por IP, por minuto, em `/api-key` e em `/mcp`+`/backups`.
+- `N8n:Url` / `N8n:ApiKey` — instância n8n padrão, usada quando a key não traz esses valores.
 - `BackupDir` — onde os backups (ver seção "Backups" abaixo) são salvos. Se vazio (padrão), usa a pasta `backups/` na raiz do host.
-- `PublicBaseUrl` — base (`scheme://host`) usada para montar o link de download dos backups (`backupUrl`/`downloadUrl`). Útil atrás de um reverse proxy sem forwarded headers. Se vazio (padrão), é derivado da própria requisição MCP recebida.
+- `PublicBaseUrl` — base (`scheme://host`) usada para montar o link de download dos backups (`backupUrl`/`baseUrl`). Útil atrás de um reverse proxy sem forwarded headers. Se vazio (padrão), é derivado da própria requisição MCP recebida.
+- `IgnoreSslErrors` — ignora erros de validação do certificado TLS da instância n8n (certificado autoassinado, cadeia inválida). Desligado por padrão.
 - `Shell:*` — configura as tools de execução de comandos do sistema operacional (ver seção "Tool de execução de comandos do sistema operacional" abaixo).
 
 Em ambiente de desenvolvimento o endpoint MCP fica disponível em `http://localhost:5462/mcp` ou `https://localhost:7268/mcp`.
@@ -67,11 +160,13 @@ Em ambiente de desenvolvimento o endpoint MCP fica disponível em `http://localh
 
 ```bash
 # Adicionar globalmente (disponível em todos os projetos)
-claude mcp add --scope user n8n --transport http http://localhost:5462/mcp --header "X-N8N-URL: url-da-sua-instancia-n8n" --header "X-N8N-API-KEY: sua-api-key"
+claude mcp add --scope user n8n --transport http http://localhost:5462/mcp --header "x-api-key: sua-key"
 
 # Adicionar no projeto atual
-claude mcp add n8n --transport http http://localhost:5462/mcp --header "X-N8N-URL: url-da-sua-instancia-n8n" --header "X-N8N-API-KEY: sua-api-key"
+claude mcp add n8n --transport http http://localhost:5462/mcp --header "x-api-key: sua-key"
 ```
+
+A `sua-key` é a key composta gerada na página web do servidor ou pelo endpoint `/api-key/generate` (ver "Autenticação" acima) — ela já carrega a URL e a API Key do n8n, então nenhum outro header é necessário.
 
 Outros comandos úteis:
 
@@ -158,7 +253,13 @@ O servidor não faz mais backup automaticamente antes de operações destrutivas
 
 #### Baixando um backup
 
-`backupUrl`/`downloadUrl` apontam para `GET /backups/{fileName}` no próprio servidor MCP. O endpoint é aberto (sem autenticação) — basta acessar a URL em qualquer navegador ou cliente HTTP. Retorna `404` se o arquivo não existir.
+`backupUrl` (e `baseUrl` + `fileName`, em `list_backups`) apontam para `GET /backups/{fileName}` no próprio servidor MCP. O endpoint **exige o header `x-api-key`**, com a mesma key composta usada em `/mcp` — então o link não abre direto no navegador; baixe com um cliente que mande o header:
+
+```bash
+curl -O -H "x-api-key: <sua-key>" http://localhost:5462/backups/<nome-do-arquivo>
+```
+
+Retorna `401` sem a key e `404` se o arquivo não existir.
 
 ### Shell
 
@@ -193,7 +294,7 @@ Desligada por padrão (`Shell:Enabled = false`). Quando ligada, expõe dois tool
 | `AllowedCommands` | `[]` (sem restrição) | Se preenchida, só libera comandos cujo executável esteja na lista — checado em cada segmento do comando (separado por `;`, `&&`, `\|\|`, `\|`, `&`) |
 | `BlockedCommands` | `[]` (sem restrição) | Bloqueia comandos cujo executável esteja na lista, com a mesma checagem por segmento |
 
-**Importante:** mesmo com allowlist/blocklist e senha configuradas, isso é um guard-rail e **não uma sandbox** — quoting, subshells e comandos como `powershell -c "..."` ainda podem contornar a checagem. A imagem Docker deste servidor é publicada publicamente, então **avalie com cuidado antes de ligar `Shell:Enabled`** em qualquer instância exposta além de `localhost`, e configure pelo menos `Shell:Password`.
+**Importante:** mesmo com allowlist/blocklist e senha configuradas, isso é um guard-rail e **não uma sandbox** — quoting, subshells e comandos como `powershell -c "..."` ainda podem contornar a checagem. O `x-api-key` já impede que um desconhecido chame as tools, mas qualquer portador de uma key válida executa comandos na máquina do servidor, então **avalie com cuidado antes de ligar `Shell:Enabled`** em qualquer instância exposta além de `localhost`, e configure pelo menos `Shell:Password`.
 
 ## Testando via Postman
 
@@ -210,8 +311,7 @@ Antes de chamar qualquer tool, é necessário enviar a mensagem de inicializaç�
 - **Headers:**
   ```
   Content-Type: application/json
-  X-N8N-URL: <url-da-sua-instancia-n8n>
-  X-N8N-API-KEY: <sua-api-key>
+  x-api-key: <sua-key>
   ```
 - **Body (raw JSON):**
   ```json
@@ -239,8 +339,7 @@ Guarde o header `mcp-session-id` retornado na resposta — ele é necessário na
 - **Headers:**
   ```
   Content-Type: application/json
-  X-N8N-URL: <url-da-sua-instancia-n8n>
-  X-N8N-API-KEY: <sua-api-key>
+  x-api-key: <sua-key>
   mcp-session-id: <id-retornado-no-initialize>
   ```
 - **Body (raw JSON):**
@@ -295,21 +394,28 @@ Para descobrir todas as tools expostas pelo servidor:
 ## Arquitetura
 
 ```
-src/Backend/N8nMcpHttp/Program.cs                          — bootstrap: registra serviços, monta o servidor MCP e expõe GET /backups/{fileName}
-src/Backend/N8nMcpHttp/Middleware/McpTrafficLoggingMiddleware.cs — loga request/response completos sob /mcp
+src/Backend/GeraApiKey/ApiKeyGenerator.cs                  — junta/desfaz uma lista de strings numa única key Base64Url
+src/Backend/N8nMcpHttp/Program.cs                          — bootstrap: serviços, pipeline de autenticação, servidor MCP e endpoints HTTP
+src/Backend/N8nMcpHttp/McpApiKey.cs                        — contrato do header x-api-key: nome e ordem dos valores
+src/Backend/N8nMcpHttp/McpAuthOptions.cs                   — POCO com as chaves MCP autorizadas (seção McpAuth)
+src/Backend/N8nMcpHttp/Middleware/McpApiKeyMiddleware.cs   — valida o x-api-key em /mcp, /api-key e /backups (fail-closed)
+src/Backend/N8nMcpHttp/Middleware/McpTrafficLoggingMiddleware.cs — loga request/response completos sob /mcp, redigindo segredos
+src/Backend/N8nMcpHttp/Endpoints/ApiKeyEndpoints.cs        — POST /api-key/generate e /api-key/decode
+src/Backend/N8nMcpHttp/wwwroot/index.html                  — página pública que gera e decodifica a key
+src/Backend/N8nMcpHttp/HttpRequestContext.cs               — decodifica o x-api-key da requisição em curso
 src/Backend/McpToolkit/McpOptions.cs                       — POCO com Url, ApiKey, BackupDir e PublicBaseUrl mapeados do appsettings.json
 src/Backend/McpToolkit/McpClient.cs                        — wrapper sobre HttpClient para a API REST do n8n
-src/Backend/McpToolkit/McpTools.cs                         — tools MCP expostas via atributos [McpServerTool]
-src/Backend/McpToolkit/BackupService.cs                    — salva/lista/lê snapshots JSON em disco antes de operações destrutivas
+src/Backend/McpToolkit/WorkflowTools.cs, DataTableTools.cs, ExecutionTools.cs, TagTools.cs, BackupTools.cs — tools MCP, uma classe por família
+src/Backend/McpToolkit/BackupService.cs                    — salva/lista/lê/exclui snapshots JSON em disco
 src/Backend/McpToolkit/Shell/                              — tools MCP de execução de comandos do SO (desligadas por padrão)
 tests/McpTests/                                            — projeto de testes xUnit para o McpToolkit
 ```
 
-O `McpClient` resolve o destino priorizando os headers `X-N8N-URL` / `X-N8N-API-KEY` da requisição atual, com fallback para `McpOptions` (`appsettings.json`). Isso permite que uma única instância do servidor atenda múltiplas instâncias n8n, uma por requisição.
+O `McpApiKeyMiddleware` autentica `/mcp`, `/api-key` e `/backups` antes de qualquer tool rodar; só `/`, os arquivos estáticos e `/health` ficam abertos. O `McpClient` resolve o destino priorizando os valores que vêm dentro do `x-api-key` (via `IRequestContext`, implementado pelo `HttpRequestContext`), com fallback para `McpOptions` (`appsettings.json`) e para as variáveis `N8N_URL`/`N8N_API_KEY`. Isso permite que uma única instância do servidor atenda múltiplas instâncias n8n, uma por requisição. O `McpToolkit` não conhece o formato do header — é o host que decodifica.
 
 A API de criação/atualização de workflow do n8n só aceita os campos `name`, `nodes`, `connections` e `settings` — o `McpClient` filtra o payload para conter apenas esses campos antes de cada chamada, e implementa atualizações parciais no lado do cliente (faz `GET` do workflow atual, mescla os campos alterados e envia o resultado filtrado). As ferramentas de edição granular de node (`update_workflow_node`, `add_workflow_node`, `delete_workflow_node`, `rename_workflow_node`) seguem o mesmo padrão, mas mesclando apenas o node/conexão alterado antes do `PUT`.
 
-O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções, aceita URL do editor n8n como `workflow_id`, e delega ao `BackupService` o snapshot sob demanda quando `backup_workflow`/`backup_data_table` são chamados explicitamente (não há mais backup automático antes de operações destrutivas). O nome do arquivo de backup inclui o nome sanitizado do workflow/tabela além do ID (ex: `20260711-153000-workflow-MeuFluxo-abc123.json`). O conteúdo do backup fica em disco (pasta `backups/` por padrão) e nunca passa pela IA — a ferramenta retorna apenas o nome do arquivo (`backupFile`) e um link de download (`backupUrl`), montado por `McpTools.BuildBackupUrl` a partir de `N8n:PublicBaseUrl` ou, na ausência dele, do host da própria requisição MCP. O endpoint `GET /backups/{fileName}` (`Program.cs`) é aberto, sem autenticação — serve o arquivo direto se ele existir.
+As classes de tools reduzem o volume de JSON devolvido à IA: resumem listas e execuções, aceitam URL do editor n8n como `workflow_id`, e delegam ao `BackupService` o snapshot sob demanda quando `backup_workflow`/`backup_data_table` são chamados explicitamente (não há backup automático antes de operações destrutivas). O nome do arquivo de backup inclui o nome sanitizado do workflow/tabela além do ID (ex: `20260711-153000123-workflow-MeuFluxo-abc123-a1b2c3.json`). O conteúdo do backup fica em disco (pasta `backups/` por padrão) e nunca passa pela IA — a ferramenta retorna apenas o nome do arquivo (`backupFile`) e um link de download (`backupUrl`), montado por `BackupTools.BuildBackupUrl` a partir de `N8n:PublicBaseUrl` ou, na ausência dele, do host da própria requisição MCP. O endpoint `GET /backups/{fileName}` (`Program.cs`) exige o header `x-api-key` e serve o arquivo direto do disco se ele existir.
 
 ## Testes
 
@@ -317,11 +423,12 @@ O `McpTools` reduz o volume de JSON devolvido à IA: resume listas e execuções
 dotnet test tests/McpTests/McpTests.csproj
 ```
 
-Os testes cobrem o `McpToolkit` (`McpClient`, `McpTools`, `BackupService`, `Shell/`) sem depender de uma instância real do n8n nem de mocking frameworks: um `HttpMessageHandler` fake (`tests/McpTests/Fakes/FakeHttpMessageHandler.cs`) simula as respostas da API REST do n8n, o `BackupService` é exercitado com um diretório temporário real, e os testes de `Shell/` executam comandos reais e triviais no shell do sistema operacional onde os testes rodam.
+Os testes cobrem o `McpToolkit` (`McpClient`, as cinco classes de tools, `BackupService`, `Shell/`) sem depender de uma instância real do n8n nem de mocking frameworks: um `HttpMessageHandler` fake (`tests/McpTests/Fakes/FakeHttpMessageHandler.cs`) simula as respostas da API REST do n8n, um `FakeRequestContext` entrega os valores que viriam do `x-api-key`, o `BackupService` é exercitado com um diretório temporário real, e os testes de `Shell/` executam comandos reais e triviais no shell do sistema operacional onde os testes rodam. O host (autenticação, endpoints de API Key, página web) não tem teste automatizado — validação é manual.
 
 ## Stack
 
 - .NET 10 / ASP.NET Core 10
 - `ModelContextProtocol.AspNetCore`
 - Serilog (console + arquivo, `logs/log.txt`)
+- Autenticação por API Key própria (header `x-api-key`), com rate limit por IP
 - Stateless — apenas proxy para a API REST do n8n

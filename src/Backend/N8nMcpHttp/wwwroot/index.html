@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>n8n MCP — API Key</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --text: #1f2328; --muted: #59636e; --border: #d0d7de; --field: #fbfcfd;
+    --accent: #0969da; --accent-soft: #ddf4ff; --accent-text: #fff;
+    --error-bg: #ffebe9; --error: #cf222e; --ok-bg: #dafbe1; --ok: #1a7f37; --warn-bg: #fff8c5; --warn: #7d4e00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --text: #e6edf3; --muted: #9198a1; --border: #30363d; --field: #0d1117;
+      --accent: #2f81f7; --accent-soft: #121d2f; --accent-text: #fff;
+      --error-bg: #3c1618; --error: #ff7b72; --ok-bg: #12261e; --ok: #3fb950; --warn-bg: #2e2410; --warn: #d29922;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 16px 48px; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; display: grid; gap: 20px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 0; display: flex; align-items: center; gap: 10px; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; background: var(--accent-soft);
+         padding: 1px 5px; border-radius: 4px; }
+  .lead { color: var(--muted); margin: 0; }
+  .step { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+          background: var(--accent); color: var(--accent-text); font-size: 14px; font-weight: 700; flex: none; }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  section > p.intro { color: var(--muted); margin: 6px 0 16px 36px; }
+
+  .how { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 16px; }
+  .how div { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+             font-size: 13.5px; color: var(--muted); }
+  .how b { display: block; color: var(--text); margin-bottom: 2px; }
+
+  .field { margin-top: 14px; }
+  .field:first-child { margin-top: 0; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  .help { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .guide { margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+  .guide summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  .guide ol { margin: 8px 0 0; padding-left: 22px; display: grid; gap: 4px; }
+  .guide code { word-break: break-all; }
+  .guide p { margin: 8px 0 0; }
+  .row { display: flex; gap: 8px; }
+  .row > input, .row > textarea { flex: 1; min-width: 0; }
+  input, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 6px;
+                    background: var(--field); color: var(--text); font: inherit; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 72px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
+  .check { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
+  .check input { width: auto; }
+
+  button { padding: 9px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--card);
+           color: var(--text); font: inherit; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button:disabled { opacity: .6; cursor: default; }
+  .actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 0 0 18px; }
+  .tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none;
+                 padding: 8px 14px; color: var(--muted); font-weight: 600; }
+  .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+
+  .msg { margin-top: 14px; padding: 10px 12px; border-radius: 6px; }
+  .msg.error { background: var(--error-bg); color: var(--error); }
+  .msg.ok { background: var(--ok-bg); color: var(--ok); }
+  .note { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 10px 12px; font-size: 13.5px; margin-top: 14px; }
+  .result { margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--border); }
+  .result h3 { font-size: 15px; margin: 0 0 10px; }
+  .usage { margin-top: 16px; }
+  .usage pre { margin: 0; padding: 10px 12px; background: var(--field); border: 1px solid var(--border); border-radius: 6px;
+               font: 12.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; flex: 1; min-width: 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🔑 Gerador de API Key — n8n MCP</h1>
+    <p class="lead">
+      O servidor MCP recebe <b>um único header</b>, <code>x-api-key</code>, que junta numa só string a sua chave de acesso
+      ao MCP e, opcionalmente, a URL e a API Key da sua instância do n8n. Esta página monta essa string para você
+      — e também faz o caminho inverso.
+    </p>
+    <div class="how">
+      <div><b>1. Identifique-se</b>Informe a chave MCP que o administrador do servidor liberou para você.</div>
+      <div><b>2. Gere a key</b>Preencha a URL e a API Key do n8n (ou deixe em branco para usar as do servidor).</div>
+      <div><b>3. Use no cliente</b>Copie a key e cadastre-a no header <code>x-api-key</code> do Claude Code, Copilot Studio etc.</div>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="step">1</span> Sua chave MCP</h2>
+    <p class="intro">Necessária para usar esta página: o servidor só gera ou decodifica keys para quem tem uma chave válida.</p>
+    <div class="field">
+      <label for="authKey">Chave MCP</label>
+      <div class="row">
+        <input id="authKey" type="password" autocomplete="off" placeholder="Ex.: minha-chave-mcp">
+        <button type="button" data-toggle="authKey">Mostrar</button>
+      </div>
+      <p class="help">É uma das chaves cadastradas em <code>McpAuth:ApiKeys</code> no servidor. Não sabe qual é? Peça a quem administra o servidor.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span> O que você quer fazer?</h2>
+    <p class="intro">Gere uma key nova, ou cole uma key existente para conferir o que há dentro dela.</p>
+
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabGenerate" aria-controls="panelGenerate" aria-selected="true">Gerar key</button>
+      <button type="button" role="tab" id="tabDecode" aria-controls="panelDecode" aria-selected="false">Decodificar key</button>
+    </div>
+
+    <div id="panelGenerate" role="tabpanel" aria-labelledby="tabGenerate">
+      <form id="generateForm" novalidate>
+        <div class="field">
+          <label class="check"><input id="genSameKey" type="checkbox" checked> Gravar na key a mesma chave MCP informada no passo 1</label>
+          <p class="help">É o caso comum. Desmarque só se a key for para outra pessoa, com outra chave MCP.</p>
+        </div>
+        <div class="field" id="genMcpApiKeyField" hidden>
+          <label for="genMcpApiKey">Chave MCP a gravar na key</label>
+          <div class="row">
+            <input id="genMcpApiKey" type="password" autocomplete="off" placeholder="Ex.: chave-mcp-do-colega">
+            <button type="button" data-toggle="genMcpApiKey">Mostrar</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="genN8nUrl">URL da instância n8n</label>
+          <input id="genN8nUrl" type="url" autocomplete="off" placeholder="https://n8n.minha-empresa.com">
+          <p class="help">Só o endereço base da instância, sem <code>/api/v1</code> e sem barra no fim — o servidor completa o caminho da API.</p>
+        </div>
+        <div class="field">
+          <label for="genN8nApiKey">API Key do n8n</label>
+          <div class="row">
+            <input id="genN8nApiKey" type="password" autocomplete="off" placeholder="API Key gerada nas configurações do n8n">
+            <button type="button" data-toggle="genN8nApiKey">Mostrar</button>
+          </div>
+          <details class="guide">
+            <summary>Como obter a URL e a API Key do n8n</summary>
+            <ol>
+              <li>Faça login no n8n e copie da barra de endereços o começo da URL, até o domínio. Exemplo: de
+                  <code>https://n8n.minha-empresa.com/home/workflows</code> fica
+                  <code>https://n8n.minha-empresa.com</code>. Cole no campo <b>URL da instância n8n</b>.</li>
+              <li>No menu <i>Settings</i>, no canto inferior esquerdo, escolha a opção <b>n8n API</b>.</li>
+              <li>Clique em <i>Create an API Key</i>.</li>
+              <li>Dê um nome, escolha a expiração e selecione as permissões que esta API Key terá (podem ser
+                  editadas depois). Clique em <i>Save</i>.</li>
+              <li>Copie o valor gerado e cole no campo <b>API Key do n8n</b>. O n8n só mostra a chave uma vez;
+                  se você a perder, será preciso gerar outra.</li>
+            </ol>
+          </details>
+        </div>
+        <p class="help">💡 Deixando URL e API Key do n8n em branco, o servidor usa a instância e a credencial da configuração dele.</p>
+        <div class="actions">
+          <button type="submit" class="primary">Gerar key</button>
+          <button type="button" data-clear="generate">Limpar</button>
+        </div>
+      </form>
+      <div id="generateMsg" class="msg" hidden></div>
+
+      <div id="generateResult" class="result" hidden>
+        <h3>✅ Key gerada</h3>
+        <div class="row">
+          <textarea id="genOutput" readonly aria-label="Key gerada"></textarea>
+          <button type="button" data-copy="genOutput">Copiar</button>
+        </div>
+        <div class="note">
+          ⚠️ Trate a key como uma senha: ela <b>não é criptografada</b>, só embaralhada — quem a tiver consegue recuperar
+          a API Key do n8n que está dentro dela. Cada clique em "Gerar" produz uma key diferente, e todas são válidas.
+        </div>
+
+        <div class="usage">
+          <h3>Como usar</h3>
+          <label for="usageClaude">No Claude Code (terminal)</label>
+          <div class="row">
+            <pre id="usageClaude"></pre>
+            <button type="button" data-copy="usageClaude">Copiar</button>
+          </div>
+          <p class="help">Acrescente <code>--scope user</code> depois de <code>add</code> para o MCP ficar disponível em todos os projetos.</p>
+          <p class="help">Em conectores web (Claude Web, Copilot Studio), informe a URL <code id="usageUrl"></code> e o header <code>x-api-key</code> com a key acima.</p>
+          <details class="guide">
+            <summary>Como adicionar no Copilot Studio</summary>
+            <ol>
+              <li>No agente, abra <i>Tools</i>, clique em <i>Add a tool</i> → <i>New tool</i> → <i>Model Context Protocol</i>.</li>
+              <li>Preencha <i>Server name</i>, <i>Server description</i> (diga que o servidor lê e edita workflows e data tables do n8n — o agente usa isso para decidir quando chamá-lo) e, em <i>Server URL</i>, <code class="mcp-url"></code>.</li>
+              <li>Em <i>Authentication</i>, escolha <i>API key</i>, <i>Type</i> = <i>Header</i> e nome do header <code>x-api-key</code>. Clique em <i>Create</i>.</li>
+              <li>Na tela <i>Add tool</i>, escolha <i>Create a new connection</i>, cole a key gerada acima e clique em <i>Add to agent</i>.</li>
+            </ol>
+          </details>
+          <details class="guide">
+            <summary>Como adicionar no Claude Web (conector personalizado)</summary>
+            <ol>
+              <li>Planos Free, Pro e Max: vá em <i>Customize → Connectors</i> e clique em <i>Add custom connector</i>.
+                  Planos Team e Enterprise: um Owner vai em <i>Organization settings → Connectors</i> → <i>Add</i> → <i>Custom</i> → <i>Web</i>.</li>
+              <li>Em <i>MCP server URL</i>, informe <code class="mcp-url"></code>.</li>
+              <li>Em <i>Authentication</i>, escolha <i>No sign-in</i>.</li>
+              <li>Em <i>Request headers</i>, selecione <code>x-api-key</code>, cole a key gerada acima como valor, marque <i>Required</i> e clique em <i>Add</i>.</li>
+              <li>Na conversa, ligue o conector pelo botão <b>+</b> → <i>Connectors</i>.</li>
+            </ol>
+            <p>⚠️ <i>Request headers</i> está em beta e ainda não aparece para todas as organizações. O valor do header vale para todos que usam o conector: numa organização, todos agirão no n8n com a API Key gravada nessa key. O header não pode ser editado depois; para trocar a key, remova o conector e adicione de novo.</p>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div id="panelDecode" role="tabpanel" aria-labelledby="tabDecode" hidden>
+      <form id="decodeForm" novalidate>
+        <div class="field">
+          <label for="decApiKey">Key a decodificar</label>
+          <textarea id="decApiKey" autocomplete="off" placeholder="Cole aqui a key (o valor do header x-api-key)"></textarea>
+          <p class="help">Útil para conferir para qual instância uma key aponta ou recuperar a API Key gravada nela.</p>
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary">Decodificar key</button>
+          <button type="button" data-clear="decode">Limpar</button>
+        </div>
+      </form>
+      <div id="decodeMsg" class="msg" hidden></div>
+
+      <div id="decodeResult" class="result" hidden>
+        <h3>🔍 Conteúdo da key</h3>
+        <div class="field">
+          <label for="decMcpApiKey">Chave MCP</label>
+          <div class="row">
+            <input id="decMcpApiKey" type="password" readonly>
+            <button type="button" data-toggle="decMcpApiKey">Mostrar</button>
+            <button type="button" data-copy="decMcpApiKey">Copiar</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="decN8nUrl">URL da instância n8n</label>
+          <div class="row">
+            <input id="decN8nUrl" readonly>
+            <button type="button" data-copy="decN8nUrl">Copiar</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="decN8nApiKey">API Key do n8n</label>
+          <div class="row">
+            <input id="decN8nApiKey" type="password" readonly>
+            <button type="button" data-toggle="decN8nApiKey">Mostrar</button>
+            <button type="button" data-copy="decN8nApiKey">Copiar</button>
+          </div>
+        </div>
+        <p class="help">Campos vazios significam que a key não traz esse valor — o servidor usa o da configuração dele.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="help" style="text-align:center">🔒 Nada do que você digita fica salvo no navegador; tudo é enviado apenas a este servidor.</p>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  // URL base do servidor = endereço em que a página foi aberta (sem query/hash e sem o nome do arquivo),
+  // para funcionar em qualquer host — inclusive atrás de proxy com prefixo, acessado sem a barra final.
+  const baseUrl = (() => {
+    const url = new URL(location.href);
+    url.search = url.hash = '';
+    if (url.pathname.endsWith('/index.html'))
+      url.pathname = url.pathname.slice(0, -'index.html'.length);
+    else if (!url.pathname.endsWith('/'))
+      url.pathname += '/';
+    return url;
+  })();
+  const mcpUrl = new URL('mcp', baseUrl).href;
+  const emptyText = '(vazio — usa a configuração do servidor)';
+
+  function showMessage(id, text, kind) {
+    const el = $(id);
+    el.textContent = text;
+    el.className = 'msg ' + kind;
+    el.hidden = !text;
+  }
+
+  function friendlyError(status, error) {
+    if (status === 401)
+      return 'Chave MCP não aceita pelo servidor. Confira a chave informada no passo 1.';
+    if (status === 429)
+      return 'Muitas tentativas em pouco tempo. Aguarde um minuto e tente de novo.';
+    if (status === 400 && error)
+      return error === 'API Key inválida.'
+        ? 'Essa key não é válida. Confira se ela foi colada inteira, sem espaços ou quebras de linha a mais.'
+        : error;
+    return error || `O servidor respondeu com erro ${status}.`;
+  }
+
+  async function callApi(path, body) {
+    const authKey = $('authKey').value.trim();
+    if (!authKey) {
+      $('authKey').focus();
+      throw new Error('Informe primeiro a sua chave MCP (passo 1).');
+    }
+
+    let response;
+    try {
+      response = await fetch(new URL(path, baseUrl), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': authKey },
+        body: JSON.stringify(body)
+      });
+    } catch {
+      throw new Error('Não foi possível falar com o servidor. Verifique se ele está no ar e tente de novo.');
+    }
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok)
+      throw new Error(friendlyError(response.status, data && data.error));
+    return data;
+  }
+
+  async function submitWith(form, msgId, resultId, busyText, action) {
+    const button = form.querySelector('button[type=submit]');
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = busyText;
+    showMessage(msgId, '', 'ok');
+    $(resultId).hidden = true;
+    try {
+      await action();
+      $(resultId).hidden = false;
+      $(resultId).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+      showMessage(msgId, err.message, 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
+  function selectTab(tab) {
+    for (const t of document.querySelectorAll('[role=tab]')) {
+      const selected = t === tab;
+      t.setAttribute('aria-selected', selected);
+      $(t.getAttribute('aria-controls')).hidden = !selected;
+    }
+  }
+
+  for (const tab of document.querySelectorAll('[role=tab]'))
+    tab.addEventListener('click', () => selectTab(tab));
+
+  $('genSameKey').addEventListener('change', e => {
+    $('genMcpApiKeyField').hidden = e.target.checked;
+    if (!e.target.checked) $('genMcpApiKey').focus();
+  });
+
+  $('generateForm').addEventListener('submit', e => {
+    e.preventDefault();
+    submitWith(e.target, 'generateMsg', 'generateResult', 'Gerando…', async () => {
+      const sameKey = $('genSameKey').checked;
+      const mcpApiKey = sameKey ? $('authKey').value.trim() : $('genMcpApiKey').value.trim();
+      if (!sameKey && !mcpApiKey) {
+        $('genMcpApiKey').focus();
+        throw new Error('Informe a chave MCP a gravar na key, ou marque a opção de usar a mesma do passo 1.');
+      }
+
+      const n8nUrl = $('genN8nUrl').value.trim();
+      if (n8nUrl && !/^https?:\/\//i.test(n8nUrl)) {
+        $('genN8nUrl').focus();
+        throw new Error('A URL da instância deve começar com https:// (ex.: https://n8n.minha-empresa.com).');
+      }
+
+      const data = await callApi('api-key/generate', {
+        mcpApiKey,
+        n8nUrl: n8nUrl || null,
+        n8nApiKey: $('genN8nApiKey').value.trim() || null
+      });
+      $('genOutput').value = data.apiKey;
+      $('usageUrl').textContent = mcpUrl;
+      for (const el of document.querySelectorAll('.mcp-url')) el.textContent = mcpUrl;
+      $('usageClaude').textContent =
+        `claude mcp add --transport http n8n ${mcpUrl} --header "x-api-key: ${data.apiKey}"`;
+    });
+  });
+
+  $('decodeForm').addEventListener('submit', e => {
+    e.preventDefault();
+    submitWith(e.target, 'decodeMsg', 'decodeResult', 'Decodificando…', async () => {
+      const apiKey = $('decApiKey').value.replace(/\s+/g, '');
+      if (!apiKey) {
+        $('decApiKey').focus();
+        throw new Error('Cole a key que deseja decodificar.');
+      }
+
+      const data = await callApi('api-key/decode', { apiKey });
+      $('decMcpApiKey').value = data.mcpApiKey ?? '';
+      $('decN8nUrl').value = data.n8nUrl ?? '';
+      $('decN8nApiKey').value = data.n8nApiKey ?? '';
+      $('decN8nUrl').placeholder = $('decN8nApiKey').placeholder = emptyText;
+    });
+  });
+
+  function clearPanel(which) {
+    if (which === 'generate') {
+      $('generateForm').reset();
+      $('genMcpApiKeyField').hidden = true;
+      $('generateResult').hidden = true;
+      showMessage('generateMsg', '', 'ok');
+    } else {
+      $('decodeForm').reset();
+      $('decodeResult').hidden = true;
+      showMessage('decodeMsg', '', 'ok');
+    }
+  }
+
+  document.addEventListener('click', async e => {
+    const target = e.target.closest('button');
+    if (!target) return;
+
+    if (target.dataset.clear)
+      clearPanel(target.dataset.clear);
+
+    const toggle = target.dataset.toggle;
+    if (toggle) {
+      const input = $(toggle);
+      const hidden = input.type === 'password';
+      input.type = hidden ? 'text' : 'password';
+      target.textContent = hidden ? 'Ocultar' : 'Mostrar';
+    }
+
+    const copy = target.dataset.copy;
+    if (copy) {
+      const el = $(copy);
+      const text = 'value' in el ? el.value : el.textContent;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        target.textContent = 'Copiado! ✓';
+      } catch {
+        target.textContent = 'Não copiou';
+      }
+      setTimeout(() => target.textContent = 'Copiar', 1500);
+    }
+  });
+</script>
+</body>
+</html>

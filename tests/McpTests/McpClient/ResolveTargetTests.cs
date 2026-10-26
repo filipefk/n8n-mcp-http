@@ -51,7 +51,7 @@ public class ResolveTargetTests
         var client = TestFactories.BuildMcpClient(handler, url: "", apiKey: "some-key");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetWorkflowAsync("wf1"));
-        Assert.Contains("X-N8N-URL", ex.Message);
+        Assert.Contains("N8n:Url", ex.Message);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class ResolveTargetTests
         var client = TestFactories.BuildMcpClient(handler, url: "https://options.test", apiKey: "");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetWorkflowAsync("wf1"));
-        Assert.Contains("X-N8N-API-KEY", ex.Message);
+        Assert.Contains("N8n:ApiKey", ex.Message);
     }
 
     [Fact]

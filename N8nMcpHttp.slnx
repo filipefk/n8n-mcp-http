@@ -8,6 +8,7 @@
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/Backend/">
+    <Project Path="src/Backend/GeraApiKey/GeraApiKey.csproj" />
     <Project Path="src/Backend/McpToolkit/McpToolkit.csproj" />
     <Project Path="src/Backend/N8nMcpHttp/N8nMcpHttp.csproj" />
   </Folder>

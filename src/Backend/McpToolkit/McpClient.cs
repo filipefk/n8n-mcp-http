@@ -10,16 +10,16 @@ public sealed class McpClient(HttpClient http, IOptions<McpOptions> options, IRe
 
     private (string ApiBase, string ApiKey) ResolveTarget()
     {
-        var url = requestContext.GetHeader("X-N8N-URL");
+        var url = requestContext.N8nUrl;
         if (string.IsNullOrWhiteSpace(url)) url = _opts.Url;
 
-        var apiKey = requestContext.GetHeader("X-N8N-API-KEY");
+        var apiKey = requestContext.N8nApiKey;
         if (string.IsNullOrWhiteSpace(apiKey)) apiKey = _opts.ApiKey;
 
         if (string.IsNullOrWhiteSpace(url))
-            throw new InvalidOperationException("URL do n8n não informada (header X-N8N-URL ou appsettings N8n:Url).");
+            throw new InvalidOperationException("URL do n8n não informada (2º valor do header x-api-key, appsettings N8n:Url ou variável N8N_URL).");
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("API key do n8n não informada (header X-N8N-API-KEY ou appsettings N8n:ApiKey).");
+            throw new InvalidOperationException("API key do n8n não informada (3º valor do header x-api-key, appsettings N8n:ApiKey ou variável N8N_API_KEY).");
 
         return ($"{url.TrimEnd('/')}/api/v1", apiKey);
     }

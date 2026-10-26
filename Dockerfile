@@ -2,6 +2,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY N8nMcpHttp.slnx .
+COPY src/Backend/GeraApiKey/GeraApiKey.csproj src/Backend/GeraApiKey/
 COPY src/Backend/McpToolkit/McpToolkit.csproj src/Backend/McpToolkit/
 COPY src/Backend/N8nMcpHttp/N8nMcpHttp.csproj src/Backend/N8nMcpHttp/
 RUN dotnet restore src/Backend/N8nMcpHttp/N8nMcpHttp.csproj

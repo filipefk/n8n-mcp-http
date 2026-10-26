@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "N8nMcpHttp",
-    "description": "Collection para testar o servidor MCP do n8n via HTTP (JSON-RPC 2.0).\n\nFluxo recomendado:\n1. Configure as variáveis `n8n_url` e `n8n_api_key` no environment (ou deixe em branco para usar a config padrão do servidor).\n2. Execute **Initialize** — o `mcp-session-id` é salvo automaticamente.\n3. Execute qualquer tool na ordem desejada.",
+    "description": "Collection para testar o servidor MCP do n8n via HTTP (JSON-RPC 2.0).\n\nTodas as chamadas exigem o header `x-api-key`.\n\nFluxo recomendado:\n1. Configure `mcp_api_key` no environment (uma das chaves de `McpAuth:ApiKeys` no servidor) e, se quiser gravar o destino na key, `n8n_url` e `n8n_api_key`.\n2. Execute **0. Generate API Key** — a key composta é salva automaticamente em `api_key`.\n3. Execute **1. Initialize** — o `mcp-session-id` é salvo automaticamente.\n4. Execute qualquer tool na ordem desejada.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,6 +12,87 @@
     }
   ],
   "item": [
+    {
+      "name": "0. Generate API Key",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "// Salva a key composta para as demais requests",
+              "var json = pm.response.json();",
+              "if (json && json.apiKey) {",
+              "    pm.environment.set('api_key', json.apiKey);",
+              "    console.log('api_key salva.');",
+              "} else {",
+              "    console.warn('Resposta sem apiKey.');",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-api-key", "value": "{{mcp_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mcpApiKey\": \"{{mcp_api_key}}\",\n  \"n8nUrl\": \"{{n8n_url}}\",\n  \"n8nApiKey\": \"{{n8n_api_key}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api-key/generate",
+          "host": ["{{base_url}}"],
+          "path": ["api-key", "generate"]
+        },
+        "description": "Gera a key composta do header `x-api-key` e salva na variável de environment `api_key`. Aqui o header `x-api-key` é a chave MCP em texto puro (`mcp_api_key`). Deixe `n8n_url`/`n8n_api_key` em branco para a key não carregar o destino — o servidor usa então o da configuração dele."
+      }
+    },
+    {
+      "name": "0. Decode API Key",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Resposta contém mcpApiKey', function () {",
+              "    pm.expect(pm.response.json()).to.have.property('mcpApiKey');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-api-key", "value": "{{mcp_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"apiKey\": \"{{api_key}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api-key/decode",
+          "host": ["{{base_url}}"],
+          "path": ["api-key", "decode"]
+        },
+        "description": "Desfaz a key composta e devolve os três valores gravados nela (chave MCP, URL e API Key do n8n)."
+      }
+    },
     {
       "name": "1. Initialize",
       "event": [
@@ -52,8 +133,7 @@
         "method": "POST",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
-          { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-          { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" }
+          { "key": "x-api-key", "value": "{{api_key}}" }
         ],
         "body": {
           "mode": "raw",
@@ -100,8 +180,7 @@
         "method": "POST",
         "header": [
           { "key": "Content-Type", "value": "application/json" },
-          { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-          { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+          { "key": "x-api-key", "value": "{{api_key}}" },
           { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
         ],
         "body": {
@@ -160,8 +239,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -196,8 +274,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -232,8 +309,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -268,8 +344,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -304,8 +379,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -359,8 +433,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -414,8 +487,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -469,8 +541,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -524,8 +595,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -580,8 +650,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -635,8 +704,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -671,8 +739,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -707,8 +774,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -743,8 +809,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -798,8 +863,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -860,8 +924,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -896,8 +959,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -932,8 +994,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -987,8 +1048,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1023,8 +1083,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1059,8 +1118,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1095,8 +1153,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1131,8 +1188,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1167,8 +1223,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1228,8 +1283,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1264,8 +1318,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1300,8 +1353,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1362,8 +1414,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1398,8 +1449,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1454,8 +1504,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1490,8 +1539,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1526,8 +1574,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1562,8 +1609,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1598,8 +1644,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1634,8 +1679,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1675,8 +1719,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1730,8 +1773,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1785,8 +1827,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1821,8 +1862,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {
@@ -1857,8 +1897,7 @@
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "X-N8N-URL", "value": "{{n8n_url}}" },
-              { "key": "X-N8N-API-KEY", "value": "{{n8n_api_key}}" },
+              { "key": "x-api-key", "value": "{{api_key}}" },
               { "key": "mcp-session-id", "value": "{{mcp_session_id}}" }
             ],
             "body": {

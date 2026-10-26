@@ -57,7 +57,7 @@ public sealed class BackupTools(McpClient n8n, BackupService backups, IOptions<M
         return await backups.SaveDataTableBackupAsync(tableId, name, table, rows, ct);
     }
 
-    [McpServerTool(Title = "Fazer backup do workflow", Destructive = false, OpenWorld = false), Description("Faz um backup de um workflow do n8n. Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
+    [McpServerTool(Title = "Fazer backup do workflow", Destructive = false, OpenWorld = false), Description("Faz um backup de um workflow do n8n. Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo, exige o header x-api-key).")]
     public async Task<string> backup_workflow(
         [Description("ID ou URL do workflow")] string workflow_id,
         CancellationToken ct = default)
@@ -67,7 +67,7 @@ public sealed class BackupTools(McpClient n8n, BackupService backups, IOptions<M
         return new JsonObject { ["workflowId"] = id, ["backupFile"] = backupFile, ["backupUrl"] = BuildBackupUrl(backupFile) }.ToJsonString();
     }
 
-    [McpServerTool(Title = "Fazer backup da data table", Destructive = false, OpenWorld = false), Description("Faz um backup de uma data table do n8n (colunas + todas as linhas). Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo).")]
+    [McpServerTool(Title = "Fazer backup da data table", Destructive = false, OpenWorld = false), Description("Faz um backup de uma data table do n8n (colunas + todas as linhas). Salva no servidor e aparece em list_backups. Retorna backupFile (nome do arquivo, usado para restaurar) e backupUrl (link para baixar o conteúdo, exige o header x-api-key).")]
     public async Task<string> backup_data_table(
         [Description("ID da data table")] string table_id,
         CancellationToken ct = default)
@@ -76,7 +76,7 @@ public sealed class BackupTools(McpClient n8n, BackupService backups, IOptions<M
         return new JsonObject { ["tableId"] = table_id, ["backupFile"] = backupFile, ["backupUrl"] = BuildBackupUrl(backupFile) }.ToJsonString();
     }
 
-    [McpServerTool(Title = "Listar backups", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista os arquivos de backup (workflows e data tables) salvos pelo servidor, mais recentes primeiro. Retorna baseUrl uma vez (concatene com fileName para baixar) em vez de repetir a URL completa por item. Resposta paginada (verifique nextCursor).")]
+    [McpServerTool(Title = "Listar backups", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Lista os arquivos de backup (workflows e data tables) salvos pelo servidor, mais recentes primeiro. Retorna baseUrl uma vez (concatene com fileName para baixar; o download exige o header x-api-key) em vez de repetir a URL completa por item. Resposta paginada (verifique nextCursor).")]
     public string list_backups(
         [Description("Filtra pelo nome do arquivo (opcional, substring, sem distinção de maiúsculas/minúsculas)")] string? filter = null,
         [Description("Quantidade máxima de itens (padrão 50, máximo 250)")] int limit = 50,

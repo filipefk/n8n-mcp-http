@@ -4,7 +4,9 @@ namespace N8nMcpHttp.Middleware;
 
 public sealed partial class McpTrafficLoggingMiddleware(RequestDelegate next, ILogger<McpTrafficLoggingMiddleware> logger)
 {
-    private static readonly string[] SensitiveHeaders = ["X-N8N-API-KEY"];
+    // X-N8N-API-KEY não é mais lido pelo servidor (a credencial vem dentro do x-api-key), mas segue
+    // na lista: se algum cliente antigo ainda mandar o header, ele não vaza para o arquivo de log.
+    private static readonly string[] SensitiveHeaders = [McpApiKey.HeaderName, "X-N8N-API-KEY", "Authorization"];
 
     // Redige o parâmetro "password" da tool execute_shell_command para não gravar
     // em texto claro no log o único segredo que protege a execução de comandos.

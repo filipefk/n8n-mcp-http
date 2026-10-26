@@ -17,12 +17,9 @@ public sealed class FakeHostEnvironment : IHostEnvironment
 
 public sealed class FakeRequestContext(string? headerUrl = null, string? headerApiKey = null, string? baseUrl = null) : IRequestContext
 {
-    public string? GetHeader(string name) => name switch
-    {
-        "X-N8N-URL" => headerUrl,
-        "X-N8N-API-KEY" => headerApiKey,
-        _ => null
-    };
+    public string? N8nUrl => headerUrl;
+
+    public string? N8nApiKey => headerApiKey;
 
     public string? GetRequestBaseUrl() => baseUrl;
 }
